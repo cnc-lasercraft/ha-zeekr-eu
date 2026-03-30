@@ -1,0 +1,39 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Connect to Zeekr Account",
+        "description": "Please enter your Zeekr credentials.",
+        "data": {
+          "username": "Username",
+          "password": "Password",
+          "country_code": "Country code",
+          "polling_interval": "Polling interval (minutes)",
+          "hmac_access_key": "HMAC access key",
+          "hmac_secret_key": "HMAC secret key",
+          "password_public_key": "Password public key",
+          "prod_secret": "Prod secret",
+          "vin_key": "VIN key",
+          "vin_iv": "VIN IV"
+        }
+      }
+    },
+    "error": {
+      "auth": "Username/Password is wrong."
+    },
+    "abort": {
+      "single_instance_allowed": "Only a single instance is allowed."
+    }
+  },
+  "options": {
+    "step": {
+      "user": {
+        "data": {
+          "binary_sensor": "Binary sensor enabled",
+          "sensor": "Sensor enabled",
+          "switch": "Switch enabled"
+        }
+      }
+    }
+  }
+}
