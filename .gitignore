@@ -12,3 +12,5 @@ build/
 *.swp
 *.swo
 .zeekr_credentials.json
+copy.json
+._*
