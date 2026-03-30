@@ -176,11 +176,10 @@ class ZeekrEUFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):  # type: ign
             )
             await self.hass.async_add_executor_job(client.login)
             self._temp_client = client
-        except Exception:  # pylint: disable=broad-except
-            pass
-        else:
-            return True
-        return False
+        except Exception as ex:  # pylint: disable=broad-except
+            _LOGGER.error("Zeekr EU login failed: %s: %s", type(ex).__name__, ex)
+            return False
+        return True
 
 
 class ZeekrEUOptionsFlowHandler(config_entries.OptionsFlow):

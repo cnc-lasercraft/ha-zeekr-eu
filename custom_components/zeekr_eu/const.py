@@ -6,7 +6,7 @@ DOMAIN = "zeekr_eu"
 DOMAIN_DATA = f"{DOMAIN}_data"
 VERSION = "1.0.0"
 
-ISSUE_URL = "https://github.com/sood/ha-zeekr-eu/issues"
+ISSUE_URL = "https://github.com/cnc-lasercraft/ha-zeekr-eu/issues"
 
 # Icons
 ICON = "mdi:format-quote-close"
