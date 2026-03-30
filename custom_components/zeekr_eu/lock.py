@@ -1,4 +1,4 @@
-"""Lock platform for Zeekr EV API Integration."""
+"""Lock platform for Zeekr EU Integration."""
 
 from __future__ import annotations
 

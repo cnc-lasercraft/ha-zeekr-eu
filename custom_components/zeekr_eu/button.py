@@ -1,4 +1,4 @@
-"""Button platform for Zeekr EV API Integration."""
+"""Button platform for Zeekr EU Integration."""
 
 from __future__ import annotations
 

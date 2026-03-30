@@ -1,4 +1,4 @@
-"""Binary sensor platform for Zeekr EV API Integration."""
+"""Binary sensor platform for Zeekr EU Integration."""
 
 from __future__ import annotations
 

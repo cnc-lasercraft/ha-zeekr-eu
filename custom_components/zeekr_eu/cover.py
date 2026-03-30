@@ -1,4 +1,4 @@
-"""Cover platform for Zeekr EV API Integration."""
+"""Cover platform for Zeekr EU Integration."""
 
 from __future__ import annotations
 

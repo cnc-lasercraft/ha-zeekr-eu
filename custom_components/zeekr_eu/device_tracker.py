@@ -1,4 +1,4 @@
-"""Device tracker platform for Zeekr EV API Integration."""
+"""Device tracker platform for Zeekr EU Integration."""
 
 from __future__ import annotations
 
