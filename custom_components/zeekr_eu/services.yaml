@@ -1,0 +1,84 @@
+preconditioning_start:
+  name: Start Preconditioning
+  description: >
+    Starts a combined preconditioning routine in a single API call:
+    AC, defrost, steering wheel heat and seat heat for all four seats.
+    Any field set to its "off" default is omitted from the call.
+  fields:
+    vin:
+      name: VIN
+      description: Vehicle identification number.
+      required: true
+      example: "L6TZA1S4XSN095278"
+      selector:
+        text:
+    ac_temp:
+      name: AC Target Temperature
+      description: Target cabin temperature in °C. Set to 0 to skip AC.
+      default: 21
+      example: 22
+      selector:
+        number:
+          min: 0
+          max: 30
+          step: 0.5
+          unit_of_measurement: "°C"
+    duration_min:
+      name: Duration
+      description: Duration in minutes for AC, steering wheel and seat heat.
+      default: 15
+      example: 20
+      selector:
+        number:
+          min: 1
+          max: 60
+          step: 1
+          unit_of_measurement: "min"
+    defrost:
+      name: Defrost
+      description: Enable front defrost.
+      default: false
+      selector:
+        boolean:
+    steering_wheel:
+      name: Steering Wheel Heat
+      description: Enable steering wheel heating.
+      default: false
+      selector:
+        boolean:
+    seat_driver:
+      name: Driver Seat Heat
+      description: Driver seat heat level (0=off, 1-3).
+      default: 0
+      selector:
+        number:
+          min: 0
+          max: 3
+          step: 1
+    seat_passenger:
+      name: Passenger Seat Heat
+      description: Passenger seat heat level (0=off, 1-3).
+      default: 0
+      selector:
+        number:
+          min: 0
+          max: 3
+          step: 1
+    seat_rear_left:
+      name: Rear Left Seat Heat
+      description: Rear left seat heat level (0=off, 1-3).
+      default: 0
+      selector:
+        number:
+          min: 0
+          max: 3
+          step: 1
+    seat_rear_right:
+      name: Rear Right Seat Heat
+      description: Rear right seat heat level (0=off, 1-3).
+      default: 0
+      selector:
+        number:
+          min: 0
+          max: 3
+          step: 1

@@ -2,10 +2,12 @@
 
 import logging
 
+import voluptuous as vol
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.core import HomeAssistant
-from homeassistant.exceptions import ConfigEntryNotReady
+from homeassistant.core import HomeAssistant, ServiceCall
+from homeassistant.exceptions import ConfigEntryNotReady, HomeAssistantError
 from homeassistant.helpers.typing import ConfigType
+import homeassistant.helpers.config_validation as cv
 
 from .api import ZeekrClient
 from .const import (
@@ -24,6 +26,42 @@ from .const import (
 )
 from .coordinator import ZeekrCoordinator
 from .request_stats import ZeekrRequestStats
+
+SERVICE_PRECONDITIONING_START = "preconditioning_start"
+
+PRECONDITIONING_SCHEMA = vol.Schema(
+    {
+        vol.Required("vin"): cv.string,
+        vol.Optional("ac_temp", default=21): vol.All(
+            vol.Coerce(float), vol.Range(min=0, max=30)
+        ),
+        vol.Optional("duration_min", default=15): vol.All(
+            vol.Coerce(int), vol.Range(min=1, max=60)
+        ),
+        vol.Optional("defrost", default=False): cv.boolean,
+        vol.Optional("steering_wheel", default=False): cv.boolean,
+        vol.Optional("seat_driver", default=0): vol.All(
+            vol.Coerce(int), vol.Range(min=0, max=3)
+        ),
+        vol.Optional("seat_passenger", default=0): vol.All(
+            vol.Coerce(int), vol.Range(min=0, max=3)
+        ),
+        vol.Optional("seat_rear_left", default=0): vol.All(
+            vol.Coerce(int), vol.Range(min=0, max=3)
+        ),
+        vol.Optional("seat_rear_right", default=0): vol.All(
+            vol.Coerce(int), vol.Range(min=0, max=3)
+        ),
+    }
+)
+
+# Seat heat service code by position (matches select.py)
+SEAT_SERVICE_CODES = {
+    "seat_driver": "SH.11",
+    "seat_passenger": "SH.19",
+    "seat_rear_left": "SH.21",
+    "seat_rear_right": "SH.29",
+}
 
 _LOGGER: logging.Logger = logging.getLogger(__package__)
 
@@ -94,7 +132,83 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry):
 
     hass.data[DOMAIN][entry.entry_id] = coordinator
 
+    # Start the preconditioning scheduler now that we have vehicles
+    coordinator.start_vorbereitung_scheduler()
+
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
+
+    # Register the preconditioning service (idempotent across reloads)
+    if not hass.services.has_service(DOMAIN, SERVICE_PRECONDITIONING_START):
+        async def _handle_preconditioning_start(call: ServiceCall) -> None:
+            vin = call.data["vin"]
+            duration = call.data["duration_min"]
+
+            # Locate the coordinator that owns this VIN
+            target_coordinator: ZeekrCoordinator | None = None
+            for coord in hass.data[DOMAIN].values():
+                if not isinstance(coord, ZeekrCoordinator):
+                    continue
+                if coord.get_vehicle_by_vin(vin):
+                    target_coordinator = coord
+                    break
+
+            if target_coordinator is None:
+                raise HomeAssistantError(f"No vehicle with VIN {vin} found")
+
+            vehicle = target_coordinator.get_vehicle_by_vin(vin)
+
+            params: list[dict[str, str]] = []
+
+            # AC: only include if temp > 0
+            ac_temp = call.data["ac_temp"]
+            if ac_temp > 0:
+                params.append({"key": "AC", "value": "true"})
+                params.append({"key": "AC.temp", "value": str(ac_temp)})
+                params.append({"key": "AC.duration", "value": str(duration)})
+
+            # Defrost
+            if call.data["defrost"]:
+                params.append({"key": "DF", "value": "true"})
+                params.append({"key": "DF.level", "value": "2"})
+
+            # Steering wheel heating
+            if call.data["steering_wheel"]:
+                params.append({"key": "SW", "value": "true"})
+                params.append({"key": "SW.level", "value": "3"})
+                params.append({"key": "SW.duration", "value": str(duration)})
+
+            # Seat heat (4 seats)
+            for seat_field, service_code in SEAT_SERVICE_CODES.items():
+                level = call.data[seat_field]
+                if level > 0:
+                    params.append({"key": service_code, "value": "true"})
+                    params.append({"key": f"{service_code}.level", "value": str(level)})
+                    params.append({"key": f"{service_code}.duration", "value": str(duration)})
+
+            if not params:
+                raise HomeAssistantError(
+                    "preconditioning_start called with no active components"
+                )
+
+            setting = {"serviceParameters": params}
+
+            _LOGGER.info(
+                "preconditioning_start for %s with %d params: %s",
+                vin, len(params), params,
+            )
+
+            await target_coordinator.async_inc_invoke()
+            await hass.async_add_executor_job(
+                vehicle.do_remote_control, "start", "ZAF", setting
+            )
+            await target_coordinator.async_request_refresh()
+
+        hass.services.async_register(
+            DOMAIN,
+            SERVICE_PRECONDITIONING_START,
+            _handle_preconditioning_start,
+            schema=PRECONDITIONING_SCHEMA,
+        )
 
     entry.async_on_unload(entry.add_update_listener(async_reload_entry))
     return True
@@ -104,6 +218,7 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Handle removal of an entry."""
     coordinator = hass.data[DOMAIN].get(entry.entry_id)
     if coordinator:
+        coordinator.stop_vorbereitung_scheduler()
         await coordinator.request_stats.async_shutdown()
 
     if unloaded := await hass.config_entries.async_unload_platforms(entry, PLATFORMS):

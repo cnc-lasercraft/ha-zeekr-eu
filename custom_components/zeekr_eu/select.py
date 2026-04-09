@@ -7,11 +7,15 @@ from typing import Any
 from homeassistant.components.select import SelectEntity
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers.entity import EntityCategory
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
+from homeassistant.helpers.restore_state import RestoreEntity
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .const import DOMAIN
 from .coordinator import ZeekrCoordinator
+from .entity import ZeekrEntity
+from .vorbereitung import NUM_SLOTS, WEEKDAY_OPTIONS
 
 OPTION_OFF = "Off"
 OPTION_LEVEL_1 = "Level 1"
@@ -120,7 +124,42 @@ async def async_setup_entry(
             )
         )
 
+        # Vorbereitung Slot Tage Selects
+        for slot_idx in range(NUM_SLOTS):
+            entities.append(ZeekrSlotTageSelect(coordinator, vin, slot_idx))
+
     async_add_entities(entities)
+
+
+class ZeekrSlotTageSelect(ZeekrEntity, RestoreEntity, SelectEntity):
+    """Select entity for the day pattern of a recurring slot."""
+
+    _attr_has_entity_name = True
+    _attr_entity_category = EntityCategory.CONFIG
+    _attr_icon = "mdi:calendar-week"
+    _attr_options = WEEKDAY_OPTIONS
+
+    def __init__(self, coordinator: ZeekrCoordinator, vin: str, slot_idx: int) -> None:
+        super().__init__(coordinator, vin)
+        self._slot_idx = slot_idx
+        self._attr_name = f"Vorbereitung Slot {slot_idx + 1} Tage"
+        self._attr_unique_id = f"{vin}_vorbereitung_slot{slot_idx + 1}_tage"
+
+    @property
+    def current_option(self) -> str | None:
+        return self.coordinator.get_vorbereitung(self.vin).slots[self._slot_idx].tage
+
+    async def async_select_option(self, option: str) -> None:
+        if option not in WEEKDAY_OPTIONS:
+            return
+        self.coordinator.get_vorbereitung(self.vin).slots[self._slot_idx].tage = option
+        self.async_write_ha_state()
+
+    async def async_added_to_hass(self) -> None:
+        await super().async_added_to_hass()
+        last = await self.async_get_last_state()
+        if last and last.state in WEEKDAY_OPTIONS:
+            self.coordinator.get_vorbereitung(self.vin).slots[self._slot_idx].tage = last.state
 
 
 class ZeekrSeatSelect(CoordinatorEntity, SelectEntity):

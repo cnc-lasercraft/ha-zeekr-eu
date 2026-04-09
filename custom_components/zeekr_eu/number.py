@@ -7,14 +7,16 @@ from datetime import timedelta
 
 from homeassistant.components.number import NumberEntity, RestoreNumber
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.const import PERCENTAGE, UnitOfTime
+from homeassistant.const import PERCENTAGE, UnitOfTemperature, UnitOfTime
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers.entity import EntityCategory
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .const import DOMAIN
 from .coordinator import ZeekrCoordinator
 from .entity import ZeekrEntity
+from .vorbereitung import NUM_SLOTS
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -55,8 +57,67 @@ async def async_setup_entry(
 
     for vehicle in coordinator.vehicles:
         entities.append(ZeekrChargingLimitNumber(coordinator, vehicle.vin))
+        entities.append(ZeekrChargingNeededThreshold(coordinator, vehicle.vin))
+
+        # Vorbereitung config numbers
+        # Per slot: ac_temp, dauer, sitz_fahrer, sitz_beifahrer, sitz_hl, sitz_hr
+        for slot_idx in range(NUM_SLOTS):
+            entities.extend(_make_slot_numbers(coordinator, vehicle.vin, slot_idx))
+        # Einmalig
+        entities.extend(_make_einmalig_numbers(coordinator, vehicle.vin))
+        # Sofort
+        entities.extend(_make_sofort_numbers(coordinator, vehicle.vin))
+        # Globals
+        entities.extend(_make_global_numbers(coordinator, vehicle.vin))
 
     async_add_entities(entities)
+
+
+def _num_specs():
+    """Field specs shared by slot/einmalig/sofort: (field, label, min, max, step, unit, icon)."""
+    return [
+        ("ac_temp", "AC Temperatur", 15, 28, 0.5, UnitOfTemperature.CELSIUS, "mdi:thermometer"),
+        ("dauer", "Dauer", 5, 60, 1, UnitOfTime.MINUTES, "mdi:timer"),
+        ("sitz_fahrer", "Sitzheizung Fahrer", 0, 3, 1, None, "mdi:car-seat-heater"),
+        ("sitz_beifahrer", "Sitzheizung Beifahrer", 0, 3, 1, None, "mdi:car-seat-heater"),
+        ("sitz_hl", "Sitzheizung Hinten Links", 0, 3, 1, None, "mdi:car-seat-heater"),
+        ("sitz_hr", "Sitzheizung Hinten Rechts", 0, 3, 1, None, "mdi:car-seat-heater"),
+    ]
+
+
+def _make_slot_numbers(coordinator: ZeekrCoordinator, vin: str, slot_idx: int):
+    return [
+        ZeekrSlotNumber(coordinator, vin, slot_idx, *spec) for spec in _num_specs()
+    ]
+
+
+def _make_einmalig_numbers(coordinator: ZeekrCoordinator, vin: str):
+    return [
+        ZeekrEinmaligNumber(coordinator, vin, *spec) for spec in _num_specs()
+    ]
+
+
+def _make_sofort_numbers(coordinator: ZeekrCoordinator, vin: str):
+    return [
+        ZeekrSofortNumber(coordinator, vin, *spec) for spec in _num_specs()
+    ]
+
+
+def _make_global_numbers(coordinator: ZeekrCoordinator, vin: str):
+    return [
+        ZeekrGlobalNumber(
+            coordinator, vin, "vorlaufzeit", "Vorbereitung Vorlaufzeit",
+            5, 60, 5, UnitOfTime.MINUTES, "mdi:clock-start",
+        ),
+        ZeekrGlobalNumber(
+            coordinator, vin, "wetter_schwelle_kalt", "Vorbereitung Wetter Kälte-Schwelle",
+            -20, 20, 1, UnitOfTemperature.CELSIUS, "mdi:snowflake",
+        ),
+        ZeekrGlobalNumber(
+            coordinator, vin, "wetter_extra_min", "Vorbereitung Wetter Extra-Minuten",
+            0, 30, 1, UnitOfTime.MINUTES, "mdi:timer-plus",
+        ),
+    ]
 
 
 class ZeekrPollingIntervalNumber(CoordinatorEntity, RestoreNumber):
@@ -135,6 +196,47 @@ class ZeekrConfigNumber(CoordinatorEntity, RestoreNumber):
         self.async_write_ha_state()
 
 
+class ZeekrChargingNeededThreshold(ZeekrEntity, RestoreNumber):
+    """Threshold for the charging_needed binary sensor (per vehicle)."""
+
+    _attr_has_entity_name = True
+    _attr_native_min_value = 5
+    _attr_native_max_value = 95
+    _attr_native_step = 5
+    _attr_native_unit_of_measurement = PERCENTAGE
+    _attr_icon = "mdi:battery-alert"
+
+    def __init__(self, coordinator: ZeekrCoordinator, vin: str) -> None:
+        """Initialize the threshold number."""
+        super().__init__(coordinator, vin)
+        self._attr_name = "Charging Needed Threshold"
+        self._attr_unique_id = f"{vin}_charging_needed_threshold"
+        self._attr_native_value = 30.0
+        # Expose value on coordinator so binary_sensor can read it
+        coordinator.charging_needed_threshold = setdefault_threshold(coordinator, 30.0)
+
+    async def async_added_to_hass(self) -> None:
+        """Handle entity which will be added."""
+        await super().async_added_to_hass()
+        last_state = await self.async_get_last_number_data()
+        if last_state and last_state.native_value is not None:
+            self._attr_native_value = last_state.native_value
+            self.coordinator.charging_needed_threshold = float(last_state.native_value)
+
+    async def async_set_native_value(self, value: float) -> None:
+        """Set new threshold."""
+        self._attr_native_value = value
+        self.coordinator.charging_needed_threshold = float(value)
+        self.async_write_ha_state()
+        # Trigger refresh so binary_sensor recomputes
+        self.coordinator.async_update_listeners()
+
+
+def setdefault_threshold(coordinator: ZeekrCoordinator, default: float) -> float:
+    """Return existing threshold on coordinator or set default."""
+    return getattr(coordinator, "charging_needed_threshold", default)
+
+
 class ZeekrChargingLimitNumber(ZeekrEntity, RestoreNumber):
     """Zeekr Charging Limit Number class."""
 
@@ -210,3 +312,194 @@ class ZeekrChargingLimitNumber(ZeekrEntity, RestoreNumber):
         )
         self._attr_native_value = value
         self.async_write_ha_state()
+
+
+class _VorbereitungNumberBase(ZeekrEntity, RestoreNumber):
+    """Base for vorbereitung config numbers backed by coordinator state."""
+
+    _attr_has_entity_name = True
+    _attr_entity_category = EntityCategory.CONFIG
+
+    def __init__(
+        self,
+        coordinator: ZeekrCoordinator,
+        vin: str,
+        unique_suffix: str,
+        name: str,
+        min_v: float,
+        max_v: float,
+        step: float,
+        unit: str | None,
+        icon: str,
+    ) -> None:
+        super().__init__(coordinator, vin)
+        self._attr_name = name
+        self._attr_unique_id = f"{vin}_{unique_suffix}"
+        self._attr_native_min_value = min_v
+        self._attr_native_max_value = max_v
+        self._attr_native_step = step
+        if unit is not None:
+            self._attr_native_unit_of_measurement = unit
+        self._attr_icon = icon
+
+    def _read(self) -> float:
+        raise NotImplementedError
+
+    def _write(self, value: float) -> None:
+        raise NotImplementedError
+
+    @property
+    def native_value(self) -> float:
+        return float(self._read())
+
+    async def async_set_native_value(self, value: float) -> None:
+        self._write(value)
+        self.async_write_ha_state()
+
+    async def async_added_to_hass(self) -> None:
+        await super().async_added_to_hass()
+        last = await self.async_get_last_number_data()
+        if last and last.native_value is not None:
+            self._write(float(last.native_value))
+
+
+class ZeekrSlotNumber(_VorbereitungNumberBase):
+    """Numeric setting for a recurring slot."""
+
+    def __init__(
+        self,
+        coordinator: ZeekrCoordinator,
+        vin: str,
+        slot_idx: int,
+        field: str,
+        label: str,
+        min_v: float,
+        max_v: float,
+        step: float,
+        unit: str | None,
+        icon: str,
+    ) -> None:
+        super().__init__(
+            coordinator, vin,
+            unique_suffix=f"vorbereitung_slot{slot_idx + 1}_{field}",
+            name=f"Vorbereitung Slot {slot_idx + 1} {label}",
+            min_v=min_v, max_v=max_v, step=step, unit=unit, icon=icon,
+        )
+        self._slot_idx = slot_idx
+        self._field = field
+
+    def _read(self) -> float:
+        return getattr(
+            self.coordinator.get_vorbereitung(self.vin).slots[self._slot_idx],
+            self._field,
+        )
+
+    def _write(self, value: float) -> None:
+        slot = self.coordinator.get_vorbereitung(self.vin).slots[self._slot_idx]
+        # Cast to int for integer fields
+        if self._field in ("dauer", "sitz_fahrer", "sitz_beifahrer", "sitz_hl", "sitz_hr"):
+            setattr(slot, self._field, int(value))
+        else:
+            setattr(slot, self._field, float(value))
+
+
+class ZeekrEinmaligNumber(_VorbereitungNumberBase):
+    """Numeric setting for the one-shot Vorbereitung."""
+
+    def __init__(
+        self,
+        coordinator: ZeekrCoordinator,
+        vin: str,
+        field: str,
+        label: str,
+        min_v: float,
+        max_v: float,
+        step: float,
+        unit: str | None,
+        icon: str,
+    ) -> None:
+        super().__init__(
+            coordinator, vin,
+            unique_suffix=f"vorbereitung_einmalig_{field}",
+            name=f"Vorbereitung Einmalig {label}",
+            min_v=min_v, max_v=max_v, step=step, unit=unit, icon=icon,
+        )
+        self._field = field
+
+    def _read(self) -> float:
+        return getattr(self.coordinator.get_vorbereitung(self.vin).einmalig, self._field)
+
+    def _write(self, value: float) -> None:
+        einmalig = self.coordinator.get_vorbereitung(self.vin).einmalig
+        if self._field in ("dauer", "sitz_fahrer", "sitz_beifahrer", "sitz_hl", "sitz_hr"):
+            setattr(einmalig, self._field, int(value))
+        else:
+            setattr(einmalig, self._field, float(value))
+
+
+class ZeekrSofortNumber(_VorbereitungNumberBase):
+    """Numeric default for the sofort script."""
+
+    def __init__(
+        self,
+        coordinator: ZeekrCoordinator,
+        vin: str,
+        field: str,
+        label: str,
+        min_v: float,
+        max_v: float,
+        step: float,
+        unit: str | None,
+        icon: str,
+    ) -> None:
+        super().__init__(
+            coordinator, vin,
+            unique_suffix=f"vorbereitung_sofort_{field}",
+            name=f"Vorbereitung Sofort {label}",
+            min_v=min_v, max_v=max_v, step=step, unit=unit, icon=icon,
+        )
+        self._field = field
+
+    def _read(self) -> float:
+        return getattr(self.coordinator.get_vorbereitung(self.vin).sofort, self._field)
+
+    def _write(self, value: float) -> None:
+        sofort = self.coordinator.get_vorbereitung(self.vin).sofort
+        if self._field in ("dauer", "sitz_fahrer", "sitz_beifahrer", "sitz_hl", "sitz_hr"):
+            setattr(sofort, self._field, int(value))
+        else:
+            setattr(sofort, self._field, float(value))
+
+
+class ZeekrGlobalNumber(_VorbereitungNumberBase):
+    """Numeric global setting (vorlaufzeit, wetter schwelle, wetter extra)."""
+
+    def __init__(
+        self,
+        coordinator: ZeekrCoordinator,
+        vin: str,
+        field: str,
+        name: str,
+        min_v: float,
+        max_v: float,
+        step: float,
+        unit: str | None,
+        icon: str,
+    ) -> None:
+        super().__init__(
+            coordinator, vin,
+            unique_suffix=f"vorbereitung_global_{field}",
+            name=name,
+            min_v=min_v, max_v=max_v, step=step, unit=unit, icon=icon,
+        )
+        self._field = field
+
+    def _read(self) -> float:
+        return getattr(self.coordinator.get_vorbereitung(self.vin).globals, self._field)
+
+    def _write(self, value: float) -> None:
+        globals_cfg = self.coordinator.get_vorbereitung(self.vin).globals
+        if self._field in ("vorlaufzeit", "wetter_extra_min"):
+            setattr(globals_cfg, self._field, int(value))
+        else:
+            setattr(globals_cfg, self._field, float(value))

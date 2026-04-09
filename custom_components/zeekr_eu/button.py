@@ -32,8 +32,43 @@ async def async_setup_entry(
         entities.append(ZeekrForceUpdateButton(coordinator, vehicle.vin))
         entities.append(ZeekrFlashBlinkersButton(coordinator, vehicle.vin))
         entities.append(ZeekrDumpApiButton(coordinator, vehicle.vin))
+        entities.append(ZeekrVorbereitungSofortButton(coordinator, vehicle.vin))
 
     async_add_entities(entities)
+
+
+class ZeekrVorbereitungSofortButton(ZeekrEntity, ButtonEntity):
+    """Trigger preconditioning right now using the sofort defaults."""
+
+    _attr_has_entity_name = True
+    _attr_icon = "mdi:car-electric"
+
+    def __init__(self, coordinator: ZeekrCoordinator, vin: str) -> None:
+        super().__init__(coordinator, vin)
+        self._attr_name = "Vorbereitung Jetzt"
+        self._attr_unique_id = f"{vin}_vorbereitung_sofort"
+
+    async def async_press(self) -> None:
+        from .vorbereitung import (
+            apply_weather_override,
+            sofort_to_service_data,
+        )
+
+        state = self.coordinator.get_vorbereitung(self.vin)
+        settings = sofort_to_service_data(state.sofort)
+
+        # Weather override (uses scheduler's sensor read helper if available)
+        scheduler = self.coordinator.vorbereitung_scheduler
+        aussentemp = scheduler._read_outside_temp() if scheduler is not None else None
+        apply_weather_override(settings, aussentemp, state.globals)
+
+        _LOGGER.info("Vorbereitung Sofort button pressed for %s: %s", self.vin, settings)
+        await self.hass.services.async_call(
+            "zeekr_eu",
+            "preconditioning_start",
+            {"vin": self.vin, **settings},
+            blocking=False,
+        )
 
 
 class ZeekrFlashBlinkersButton(ZeekrEntity, ButtonEntity):

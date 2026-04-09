@@ -17,6 +17,7 @@ import homeassistant.helpers.event as event
 
 from .const import CONF_POLLING_INTERVAL, DEFAULT_POLLING_INTERVAL, DOMAIN
 from .request_stats import ZeekrRequestStats
+from .vorbereitung import VorbereitungScheduler, VorbereitungState
 
 if TYPE_CHECKING:
     from .api.client import Vehicle, ZeekrClient
@@ -44,6 +45,9 @@ class ZeekrCoordinator(DataUpdateCoordinator):
         self.request_stats = ZeekrRequestStats(hass)
         self.latest_poll_time: Optional[str] = None  # Track latest poll time
         self.auto_archive: bool = False  # Enable to save every poll to disk
+        # Per-vehicle preconditioning state (populated after first refresh)
+        self.vorbereitung: dict[str, VorbereitungState] = {}
+        self.vorbereitung_scheduler: VorbereitungScheduler | None = None
         polling_interval = entry.data.get(CONF_POLLING_INTERVAL, DEFAULT_POLLING_INTERVAL)
         super().__init__(
             hass,
@@ -77,6 +81,28 @@ class ZeekrCoordinator(DataUpdateCoordinator):
             if vehicle.vin == vin:
                 return vehicle
         return None
+
+    def get_vorbereitung(self, vin: str) -> VorbereitungState:
+        """Return the preconditioning state for a VIN, creating it on demand."""
+        if vin not in self.vorbereitung:
+            self.vorbereitung[vin] = VorbereitungState()
+        return self.vorbereitung[vin]
+
+    def start_vorbereitung_scheduler(self) -> None:
+        """Start the per-coordinator preconditioning scheduler."""
+        if self.vorbereitung_scheduler is not None:
+            return
+        # Ensure state exists for every known vehicle
+        for vehicle in self.vehicles:
+            self.get_vorbereitung(vehicle.vin)
+        self.vorbereitung_scheduler = VorbereitungScheduler(self.hass, self)
+        self.vorbereitung_scheduler.start()
+
+    def stop_vorbereitung_scheduler(self) -> None:
+        """Stop the preconditioning scheduler."""
+        if self.vorbereitung_scheduler is not None:
+            self.vorbereitung_scheduler.stop()
+            self.vorbereitung_scheduler = None
 
     async def _async_update_data(self) -> dict[str, dict]:
         """Fetch data from API endpoint."""

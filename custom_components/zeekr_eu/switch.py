@@ -9,11 +9,15 @@ from typing import Any
 from homeassistant.components.switch import SwitchEntity
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers.entity import EntityCategory
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
+from homeassistant.helpers.restore_state import RestoreEntity
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .const import DOMAIN
 from .coordinator import ZeekrCoordinator
+from .entity import ZeekrEntity
+from .vorbereitung import NUM_SLOTS
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -51,7 +55,165 @@ async def async_setup_entry(
             )
         )
 
+        # Vorbereitung config switches (per-slot, einmalig, sofort)
+        for slot_idx in range(NUM_SLOTS):
+            for field, label, icon in (
+                ("aktiv", "Aktiv", "mdi:calendar-check"),
+                ("lenkrad", "Lenkradheizung", "mdi:steering"),
+                ("defrost", "Defrost", "mdi:car-defrost-front"),
+            ):
+                entities.append(
+                    ZeekrSlotBoolSwitch(coordinator, vin, slot_idx, field, label, icon)
+                )
+
+        for field, label, icon in (
+            ("aktiv", "Aktiv", "mdi:calendar-clock"),
+            ("lenkrad", "Lenkradheizung", "mdi:steering"),
+            ("defrost", "Defrost", "mdi:car-defrost-front"),
+        ):
+            entities.append(
+                ZeekrEinmaligBoolSwitch(coordinator, vin, field, label, icon)
+            )
+
+        for field, label, icon in (
+            ("lenkrad", "Lenkradheizung", "mdi:steering"),
+            ("defrost", "Defrost", "mdi:car-defrost-front"),
+        ):
+            entities.append(
+                ZeekrSofortBoolSwitch(coordinator, vin, field, label, icon)
+            )
+
     async_add_entities(entities)
+
+
+class _VorbereitungBoolSwitchBase(ZeekrEntity, RestoreEntity, SwitchEntity):
+    """Base class for boolean switches that delegate to coordinator vorbereitung state."""
+
+    _attr_has_entity_name = True
+    _attr_entity_category = EntityCategory.CONFIG
+
+    def __init__(
+        self,
+        coordinator: ZeekrCoordinator,
+        vin: str,
+        unique_suffix: str,
+        name: str,
+        icon: str,
+    ) -> None:
+        super().__init__(coordinator, vin)
+        self._attr_name = name
+        self._attr_unique_id = f"{vin}_{unique_suffix}"
+        self._attr_icon = icon
+
+    # Subclasses must implement these
+    def _read(self) -> bool:
+        raise NotImplementedError
+
+    def _write(self, value: bool) -> None:
+        raise NotImplementedError
+
+    @property
+    def is_on(self) -> bool | None:
+        return bool(self._read())
+
+    async def async_turn_on(self, **kwargs: Any) -> None:
+        self._write(True)
+        self.async_write_ha_state()
+
+    async def async_turn_off(self, **kwargs: Any) -> None:
+        self._write(False)
+        self.async_write_ha_state()
+
+    async def async_added_to_hass(self) -> None:
+        await super().async_added_to_hass()
+        last = await self.async_get_last_state()
+        if last and last.state in ("on", "off"):
+            self._write(last.state == "on")
+
+
+class ZeekrSlotBoolSwitch(_VorbereitungBoolSwitchBase):
+    """Boolean switch for a recurring slot field."""
+
+    def __init__(
+        self,
+        coordinator: ZeekrCoordinator,
+        vin: str,
+        slot_idx: int,
+        field: str,
+        label: str,
+        icon: str,
+    ) -> None:
+        super().__init__(
+            coordinator,
+            vin,
+            unique_suffix=f"vorbereitung_slot{slot_idx + 1}_{field}",
+            name=f"Vorbereitung Slot {slot_idx + 1} {label}",
+            icon=icon,
+        )
+        self._slot_idx = slot_idx
+        self._field = field
+
+    def _read(self) -> bool:
+        slot = self.coordinator.get_vorbereitung(self.vin).slots[self._slot_idx]
+        return getattr(slot, self._field)
+
+    def _write(self, value: bool) -> None:
+        slot = self.coordinator.get_vorbereitung(self.vin).slots[self._slot_idx]
+        setattr(slot, self._field, value)
+
+
+class ZeekrEinmaligBoolSwitch(_VorbereitungBoolSwitchBase):
+    """Boolean switch for the one-shot Vorbereitung."""
+
+    def __init__(
+        self,
+        coordinator: ZeekrCoordinator,
+        vin: str,
+        field: str,
+        label: str,
+        icon: str,
+    ) -> None:
+        super().__init__(
+            coordinator,
+            vin,
+            unique_suffix=f"vorbereitung_einmalig_{field}",
+            name=f"Vorbereitung Einmalig {label}",
+            icon=icon,
+        )
+        self._field = field
+
+    def _read(self) -> bool:
+        return getattr(self.coordinator.get_vorbereitung(self.vin).einmalig, self._field)
+
+    def _write(self, value: bool) -> None:
+        setattr(self.coordinator.get_vorbereitung(self.vin).einmalig, self._field, value)
+
+
+class ZeekrSofortBoolSwitch(_VorbereitungBoolSwitchBase):
+    """Boolean switch for sofort defaults."""
+
+    def __init__(
+        self,
+        coordinator: ZeekrCoordinator,
+        vin: str,
+        field: str,
+        label: str,
+        icon: str,
+    ) -> None:
+        super().__init__(
+            coordinator,
+            vin,
+            unique_suffix=f"vorbereitung_sofort_{field}",
+            name=f"Vorbereitung Sofort {label}",
+            icon=icon,
+        )
+        self._field = field
+
+    def _read(self) -> bool:
+        return getattr(self.coordinator.get_vorbereitung(self.vin).sofort, self._field)
+
+    def _write(self, value: bool) -> None:
+        setattr(self.coordinator.get_vorbereitung(self.vin).sofort, self._field, value)
 
 
 class ZeekrAutoArchiveSwitch(CoordinatorEntity[ZeekrCoordinator], SwitchEntity):
