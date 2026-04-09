@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import json
+
 from homeassistant.components.binary_sensor import (
     BinarySensorDeviceClass,
     BinarySensorEntity,
@@ -13,6 +15,19 @@ from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .const import DOMAIN
 from .coordinator import ZeekrCoordinator
+
+
+def _parse_storage_box_status(value) -> bool | None:
+    """Parse storageBoxStatus JSON-encoded array; True if any box has status='1'."""
+    if value is None or value == "":
+        return None
+    try:
+        boxes = json.loads(value) if isinstance(value, str) else value
+        if not isinstance(boxes, list):
+            return None
+        return any(str(b.get("status")) == "1" for b in boxes if isinstance(b, dict))
+    except (json.JSONDecodeError, TypeError, AttributeError):
+        return None
 
 
 class ZeekrBinarySensor(CoordinatorEntity, BinarySensorEntity):
@@ -174,5 +189,52 @@ async def async_setup_entry(
                     BinarySensorDeviceClass.PROBLEM,
                 )
             )
+
+        # Engine running (38)
+        entities.append(
+            ZeekrBinarySensor(
+                coordinator,
+                vin,
+                "engine_running",
+                "Engine Running",
+                lambda d: (
+                    None
+                    if (v := d.get("basicVehicleStatus", {}).get("engineStatus")) is None
+                    or v == ""
+                    else v == "engine-on"
+                ),
+                BinarySensorDeviceClass.RUNNING,
+            )
+        )
+
+        # Fragrance active (44)
+        entities.append(
+            ZeekrBinarySensor(
+                coordinator,
+                vin,
+                "fragrance_active",
+                "Fragrance Active",
+                lambda d: d.get("additionalVehicleStatus", {})
+                .get("climateStatus", {})
+                .get("fragActive"),
+                None,
+            )
+        )
+
+        # Storage box open (45)
+        entities.append(
+            ZeekrBinarySensor(
+                coordinator,
+                vin,
+                "storage_box_open",
+                "Storage Box Open",
+                lambda d: _parse_storage_box_status(
+                    d.get("additionalVehicleStatus", {})
+                    .get("climateStatus", {})
+                    .get("storageBoxStatus")
+                ),
+                BinarySensorDeviceClass.OPENING,
+            )
+        )
 
     async_add_entities(entities)

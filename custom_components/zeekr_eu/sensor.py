@@ -277,6 +277,266 @@ async def async_setup_entry(
                 )
             )
 
+        # ===== Roadmap 33-45: Additional sensors verified against dumps =====
+
+        # Service info (33)
+        entities.append(
+            ZeekrSensor(
+                coordinator,
+                vin,
+                "distance_to_service",
+                "Distance To Service",
+                lambda d: d.get("additionalVehicleStatus", {})
+                .get("maintenanceStatus", {})
+                .get("distanceToService"),
+                UnitOfLength.KILOMETERS,
+                SensorDeviceClass.DISTANCE,
+                None,
+            )
+        )
+        entities.append(
+            ZeekrSensor(
+                coordinator,
+                vin,
+                "days_to_service",
+                "Days To Service",
+                lambda d: d.get("additionalVehicleStatus", {})
+                .get("maintenanceStatus", {})
+                .get("daysToService"),
+                "d",
+                None,
+                None,
+            )
+        )
+
+        # 12V auxiliary battery (34)
+        entities.append(
+            ZeekrSensor(
+                coordinator,
+                vin,
+                "aux_battery_voltage",
+                "Aux Battery Voltage",
+                lambda d: d.get("additionalVehicleStatus", {})
+                .get("maintenanceStatus", {})
+                .get("mainBatteryStatus", {})
+                .get("voltage"),
+                UnitOfElectricPotential.VOLT,
+                SensorDeviceClass.VOLTAGE,
+            )
+        )
+        entities.append(
+            ZeekrSensor(
+                coordinator,
+                vin,
+                "aux_battery_health",
+                "Aux Battery Health",
+                lambda d: d.get("additionalVehicleStatus", {})
+                .get("maintenanceStatus", {})
+                .get("mainBatteryStatus", {})
+                .get("stateOfHealth"),
+                None,
+                None,
+                None,
+            )
+        )
+
+        # Time to fully charged (35) - 2047 is a "not available" sentinel
+        entities.append(
+            ZeekrSensor(
+                coordinator,
+                vin,
+                "time_to_fully_charged",
+                "Time To Fully Charged",
+                lambda d: d.get("additionalVehicleStatus", {})
+                .get("electricVehicleStatus", {})
+                .get("timeToFullyCharged"),
+                UnitOfTime.MINUTES,
+                SensorDeviceClass.DURATION,
+            )
+        )
+
+        # Range at 20% SoC (36)
+        entities.append(
+            ZeekrSensor(
+                coordinator,
+                vin,
+                "range_at_20_soc",
+                "Range At 20% SoC",
+                lambda d: d.get("additionalVehicleStatus", {})
+                .get("electricVehicleStatus", {})
+                .get("distanceToEmptyOnBattery20Soc"),
+                UnitOfLength.KILOMETERS,
+                SensorDeviceClass.DISTANCE,
+            )
+        )
+
+        # Speed / altitude / heading (37)
+        entities.append(
+            ZeekrSensor(
+                coordinator,
+                vin,
+                "vehicle_speed",
+                "Speed",
+                lambda d: d.get("basicVehicleStatus", {}).get("speed"),
+                UnitOfSpeed.KILOMETERS_PER_HOUR,
+                SensorDeviceClass.SPEED,
+            )
+        )
+        entities.append(
+            ZeekrSensor(
+                coordinator,
+                vin,
+                "altitude",
+                "Altitude",
+                lambda d: d.get("basicVehicleStatus", {})
+                .get("position", {})
+                .get("altitude"),
+                UnitOfLength.METERS,
+                SensorDeviceClass.DISTANCE,
+            )
+        )
+        entities.append(
+            ZeekrSensor(
+                coordinator,
+                vin,
+                "heading",
+                "Heading",
+                lambda d: d.get("basicVehicleStatus", {})
+                .get("position", {})
+                .get("direction"),
+                "°",
+                None,
+                None,
+            )
+        )
+
+        # Sunroof position (39) - 0..100 with 101 likely "closed/unknown" sentinel
+        entities.append(
+            ZeekrSensor(
+                coordinator,
+                vin,
+                "sunroof_position",
+                "Sunroof Position",
+                lambda d: d.get("additionalVehicleStatus", {})
+                .get("climateStatus", {})
+                .get("sunroofPos"),
+                PERCENTAGE,
+                None,
+                None,
+            )
+        )
+
+        # Rear sun curtain position (40)
+        entities.append(
+            ZeekrSensor(
+                coordinator,
+                vin,
+                "sun_curtain_rear_position",
+                "Sun Curtain Rear Position",
+                lambda d: d.get("additionalVehicleStatus", {})
+                .get("climateStatus", {})
+                .get("sunCurtainRearPos"),
+                PERCENTAGE,
+                None,
+                None,
+            )
+        )
+
+        # AC / DC charge lid status (41) - raw enum, needs verification on car
+        entities.append(
+            ZeekrSensor(
+                coordinator,
+                vin,
+                "charge_lid_ac",
+                "Charge Lid AC",
+                lambda d: d.get("additionalVehicleStatus", {})
+                .get("electricVehicleStatus", {})
+                .get("chargeLidAcStatus"),
+                None,
+                None,
+                None,
+            )
+        )
+        entities.append(
+            ZeekrSensor(
+                coordinator,
+                vin,
+                "charge_lid_dc",
+                "Charge Lid DC",
+                lambda d: d.get("additionalVehicleStatus", {})
+                .get("electricVehicleStatus", {})
+                .get("chargeLidDcAcStatus"),
+                None,
+                None,
+                None,
+            )
+        )
+
+        # Brake fluid level (42) - raw enum
+        entities.append(
+            ZeekrSensor(
+                coordinator,
+                vin,
+                "brake_fluid_level",
+                "Brake Fluid Level",
+                lambda d: d.get("additionalVehicleStatus", {})
+                .get("maintenanceStatus", {})
+                .get("brakeFluidLevelStatus"),
+                None,
+                None,
+                None,
+            )
+        )
+
+        # Remote control modes (43) - raw enum codes from remoteControlState
+        remote_modes = [
+            ("camping_mode", "Camping Mode", "campingModeState"),
+            ("parking_comfort_mode", "Parking Comfort Mode", "parkingComfortState"),
+            ("wash_car_mode", "Wash Car Mode", "washCarModeState"),
+            ("visitor_mode", "Visitor Mode", "visitorModeState"),
+            ("privacy_mode", "Privacy Mode", "privacyMode"),
+            ("overheat_state", "Overheat State", "overheatState"),
+            ("live_detection_state", "Live Detection State", "liveDetectionState"),
+        ]
+        for mode_key, mode_name, mode_field in remote_modes:
+            entities.append(
+                ZeekrSensor(
+                    coordinator,
+                    vin,
+                    mode_key,
+                    mode_name,
+                    lambda d, f=mode_field: d.get("additionalVehicleStatus", {})
+                    .get("remoteControlState", {})
+                    .get(f),
+                    None,
+                    None,
+                    None,
+                )
+            )
+
+        # Fragrance system - active count (44)
+        entities.append(
+            ZeekrSensor(
+                coordinator,
+                vin,
+                "fragrance_active_count",
+                "Fragrance Active Count",
+                lambda d: (
+                    frag.get("activated")
+                    if isinstance(
+                        (frag := d.get("additionalVehicleStatus", {})
+                         .get("climateStatus", {})
+                         .get("fragStrs")),
+                        dict,
+                    )
+                    else None
+                ),
+                None,
+                None,
+                None,
+            )
+        )
+
         entities.append(ZeekrChargerStateSensor(coordinator, vin))
 
     async_add_entities(entities)
