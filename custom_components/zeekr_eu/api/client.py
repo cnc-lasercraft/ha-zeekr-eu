@@ -486,7 +486,13 @@ class ZeekrClient:
             json.dumps(body, separators=(",", ":")),
             extra_headers=extra_header,
         )
-        return remote_control_block.get("success", False)
+        success = remote_control_block.get("success", False)
+        self.logger.info(
+            "Remote control %s/%s: success=%s, response=%s",
+            serviceID, command, success,
+            json.dumps(remote_control_block, default=str)[:500],
+        )
+        return success
 
     def get_vehicle_charging_limit(self, vin: str) -> Dict[str, Any]:
         """
@@ -743,6 +749,150 @@ class ZeekrClient:
             return {}
 
         return trackpoints_block.get("data", {})
+
+
+    def dump_all_raw_responses(self, vin: str) -> dict[str, Any]:
+        """
+        Fetches ALL API endpoints for a vehicle and returns the full raw responses.
+        Used for archiving/debugging - returns the complete JSON including wrapper.
+        """
+        if not self.logged_in:
+            raise ZeekrException("Not logged in")
+
+        headers = self.logged_in_headers.copy()
+        headers["X-VIN"] = self._get_encrypted_vin(vin)
+
+        results: dict[str, Any] = {}
+
+        # 1. Vehicle Status
+        try:
+            results["vehicle_status"] = network.appSignedGet(
+                self,
+                f"{self.region_login_server}{const.VEHICLESTATUS_URL}?latest=false&target=new",
+                headers=headers,
+            )
+        except Exception as e:
+            results["vehicle_status"] = {"error": str(e)}
+
+        # 2. Remote Control State
+        try:
+            results["remote_control_state"] = network.appSignedGet(
+                self,
+                f"{self.region_login_server}{const.REMOTECONTROLSTATE_URL}",
+                headers=headers,
+            )
+        except Exception as e:
+            results["remote_control_state"] = {"error": str(e)}
+
+        # 3. Charging Status
+        try:
+            results["charging_status"] = network.appSignedGet(
+                self,
+                f"{self.region_login_server}{const.VEHICLECHARGINGSTATUS_URL}",
+                headers=headers,
+            )
+        except Exception as e:
+            results["charging_status"] = {"error": str(e)}
+
+        # 4. Charging Limit
+        try:
+            results["charging_limit"] = network.appSignedGet(
+                self,
+                f"{self.region_login_server}{const.CHARGING_LIMIT_URL}",
+                headers=headers,
+            )
+        except Exception as e:
+            results["charging_limit"] = {"error": str(e)}
+
+        # 5. Charge Plan
+        try:
+            results["charge_plan"] = network.appSignedGet(
+                self,
+                f"{self.region_login_server}{const.CHARGING_PLAN_URL}",
+                headers=headers,
+            )
+        except Exception as e:
+            results["charge_plan"] = {"error": str(e)}
+
+        # 6. Travel Plan
+        try:
+            results["travel_plan"] = network.appSignedGet(
+                self,
+                f"{self.region_login_server}{const.LATEST_TRAVEL_PLAN_URL}",
+                headers=headers,
+            )
+        except Exception as e:
+            results["travel_plan"] = {"error": str(e)}
+
+        # 7. Journey Log - fetch all pages
+        try:
+            now_ms = int(time.time() * 1000)
+            start_ms = now_ms - (90 * 24 * 60 * 60 * 1000)  # 90 days back
+
+            all_trips = []
+            current_page = 1
+            last_id = -1
+
+            while True:
+                body = {
+                    "currentPage": current_page,
+                    "endTime": now_ms,
+                    "lastId": last_id,
+                    "pageSize": 50,
+                    "startTime": start_ms,
+                }
+                page_result = network.appSignedPost(
+                    self,
+                    f"{self.region_login_server}{const.JOURNEY_LOG_URL}",
+                    json.dumps(body, separators=(",", ":")),
+                    extra_headers=headers,
+                )
+                page_data = page_result.get("data", {})
+                trips = page_data.get("list", [])
+                if not trips:
+                    break
+                all_trips.extend(trips)
+                total = page_data.get("total", 0)
+                if len(all_trips) >= total:
+                    break
+                last_id = trips[-1].get("tripId", -1)
+                current_page += 1
+
+            results["journey_log"] = {
+                "success": True,
+                "data": {"total": len(all_trips), "list": all_trips},
+            }
+        except Exception as e:
+            results["journey_log"] = {"error": str(e)}
+
+        # 8. Trip Trackpoints for recent trips (last 5)
+        try:
+            trackpoints = {}
+            recent_trips = all_trips[:5] if all_trips else []
+            for trip in recent_trips:
+                trip_id = trip.get("tripId")
+                report_time = trip.get("reportTime")
+                if trip_id and report_time:
+                    url = (
+                        f"{self.region_login_server}{const.TRIP_TRACKPOINTS_URL}"
+                        f"?tripReportTime={report_time}&tripId={trip_id}"
+                    )
+                    tp_result = network.appSignedGet(self, url, headers=headers)
+                    trackpoints[str(trip_id)] = tp_result
+            results["trip_trackpoints"] = trackpoints
+        except Exception as e:
+            results["trip_trackpoints"] = {"error": str(e)}
+
+        # 9. Vehicle list (basic info)
+        try:
+            results["vehicle_list"] = network.appSignedGet(
+                self,
+                f"{self.region_login_server}{const.VEHLIST_URL}?needSharedCar=true",
+            )
+        except Exception as e:
+            results["vehicle_list"] = {"error": str(e)}
+
+        return results
 
 
 class Vehicle:

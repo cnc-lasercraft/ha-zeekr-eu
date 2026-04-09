@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import logging
+from datetime import timedelta
+
 from homeassistant.components.number import NumberEntity, RestoreNumber
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import PERCENTAGE, UnitOfTime
@@ -12,6 +15,8 @@ from homeassistant.helpers.update_coordinator import CoordinatorEntity
 from .const import DOMAIN
 from .coordinator import ZeekrCoordinator
 from .entity import ZeekrEntity
+
+_LOGGER = logging.getLogger(__name__)
 
 
 async def async_setup_entry(
@@ -24,6 +29,7 @@ async def async_setup_entry(
 
     # We create global configuration numbers, not per vehicle
     entities: list[NumberEntity] = [
+        ZeekrPollingIntervalNumber(coordinator, entry.entry_id),
         ZeekrConfigNumber(
             coordinator,
             entry.entry_id,
@@ -51,6 +57,40 @@ async def async_setup_entry(
         entities.append(ZeekrChargingLimitNumber(coordinator, vehicle.vin))
 
     async_add_entities(entities)
+
+
+class ZeekrPollingIntervalNumber(CoordinatorEntity, RestoreNumber):
+    """Number entity to change polling interval at runtime."""
+
+    _attr_has_entity_name = True
+    _attr_native_min_value = 1
+    _attr_native_max_value = 60
+    _attr_native_step = 1
+    _attr_native_unit_of_measurement = UnitOfTime.MINUTES
+    _attr_icon = "mdi:update"
+
+    def __init__(self, coordinator: ZeekrCoordinator, entry_id: str) -> None:
+        """Initialize the polling interval number."""
+        super().__init__(coordinator)
+        self._attr_name = "Polling Interval"
+        self._attr_unique_id = f"{entry_id}_polling_interval"
+        current_minutes = coordinator.update_interval.total_seconds() / 60
+        self._attr_native_value = current_minutes
+
+    async def async_added_to_hass(self) -> None:
+        """Handle entity which will be added."""
+        await super().async_added_to_hass()
+        last_state = await self.async_get_last_number_data()
+        if last_state and last_state.native_value is not None:
+            self._attr_native_value = last_state.native_value
+            self.coordinator.update_interval = timedelta(minutes=last_state.native_value)
+
+    async def async_set_native_value(self, value: float) -> None:
+        """Set new polling interval."""
+        self._attr_native_value = value
+        self.coordinator.update_interval = timedelta(minutes=value)
+        _LOGGER.info("Polling interval changed to %d minute(s)", int(value))
+        self.async_write_ha_state()
 
 
 class ZeekrConfigNumber(CoordinatorEntity, RestoreNumber):

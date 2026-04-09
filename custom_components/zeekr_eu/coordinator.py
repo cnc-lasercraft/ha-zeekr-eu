@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import json
+import os
 from datetime import timedelta, datetime
 import logging
 from typing import TYPE_CHECKING, Optional
@@ -41,12 +43,14 @@ class ZeekrCoordinator(DataUpdateCoordinator):
         self.steering_wheel_duration = 15
         self.request_stats = ZeekrRequestStats(hass)
         self.latest_poll_time: Optional[str] = None  # Track latest poll time
+        self.auto_archive: bool = False  # Enable to save every poll to disk
         polling_interval = entry.data.get(CONF_POLLING_INTERVAL, DEFAULT_POLLING_INTERVAL)
         super().__init__(
             hass,
             _LOGGER,
             name=DOMAIN,
             update_interval=timedelta(minutes=polling_interval),
+            config_entry=entry,
         )
 
         # Schedule daily reset at midnight
@@ -137,10 +141,29 @@ class ZeekrCoordinator(DataUpdateCoordinator):
             # Update latest poll time on every automatic poll
             self.latest_poll_time = datetime.now().isoformat()
 
+            # Auto-archive poll data if enabled
+            if self.auto_archive and data:
+                await self.hass.async_add_executor_job(
+                    self._write_poll_archive, data
+                )
+
         except Exception as err:
             raise UpdateFailed(f"Error communicating with API: {err}") from err
         else:
             return data
+
+    def _write_poll_archive(self, data: dict) -> None:
+        """Write poll data to archive file (runs in executor)."""
+        try:
+            archive_dir = self.hass.config.path("zeekr_eu_dumps", "auto_archive")
+            os.makedirs(archive_dir, exist_ok=True)
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            file_path = os.path.join(archive_dir, f"poll_{timestamp}.json")
+            with open(file_path, "w") as f:
+                json.dump(data, f, indent=2, default=str)
+            _LOGGER.debug("Auto-archived poll data to %s", file_path)
+        except Exception as e:
+            _LOGGER.error("Failed to archive poll data: %s", e)
 
     async def async_inc_invoke(self):
         await self.request_stats.async_inc_invoke()

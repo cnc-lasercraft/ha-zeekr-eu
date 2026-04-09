@@ -14,3 +14,5 @@ build/
 .zeekr_credentials.json
 copy.json
 ._*
+zeekr_eu_dumps/
+zeekr_eu_dumps.tar.gz

@@ -28,6 +28,7 @@ async def async_setup_entry(
     entities: list[ZeekrSwitch] = []
 
     for vin in coordinator.data:
+        entities.append(ZeekrAutoArchiveSwitch(coordinator, vin))
         entities.append(ZeekrSwitch(coordinator, vin, "defrost", "Defroster"))
         entities.append(ZeekrSwitch(coordinator, vin, "charging", "Charging"))
         entities.append(
@@ -51,6 +52,51 @@ async def async_setup_entry(
         )
 
     async_add_entities(entities)
+
+
+class ZeekrAutoArchiveSwitch(CoordinatorEntity[ZeekrCoordinator], SwitchEntity):
+    """Switch to enable/disable automatic archiving of every poll response."""
+
+    _attr_icon = "mdi:archive-clock"
+
+    def __init__(self, coordinator: ZeekrCoordinator, vin: str) -> None:
+        """Initialize the switch."""
+        super().__init__(coordinator)
+        self.vin = vin
+        self._attr_name = f"Zeekr {vin[-4:] if vin else ''} Auto Archive Polls"
+        self._attr_unique_id = f"{vin}_auto_archive"
+
+    @property
+    def is_on(self) -> bool:
+        """Return true if auto-archive is enabled."""
+        return self.coordinator.auto_archive
+
+    @property
+    def extra_state_attributes(self):
+        """Return extra state attributes."""
+        archive_dir = self.hass.config.path("zeekr_eu_dumps", "auto_archive")
+        return {"archive_dir": archive_dir}
+
+    async def async_turn_on(self, **kwargs: Any) -> None:
+        """Enable auto-archive."""
+        self.coordinator.auto_archive = True
+        _LOGGER.info("Auto-archive enabled - every poll will be saved to disk")
+        self.async_write_ha_state()
+
+    async def async_turn_off(self, **kwargs: Any) -> None:
+        """Disable auto-archive."""
+        self.coordinator.auto_archive = False
+        _LOGGER.info("Auto-archive disabled")
+        self.async_write_ha_state()
+
+    @property
+    def device_info(self):
+        """Return device info."""
+        return {
+            "identifiers": {(DOMAIN, self.vin)},
+            "name": f"Zeekr {self.vin}",
+            "manufacturer": "Zeekr",
+        }
 
 
 class ZeekrSwitch(CoordinatorEntity[ZeekrCoordinator], SwitchEntity):

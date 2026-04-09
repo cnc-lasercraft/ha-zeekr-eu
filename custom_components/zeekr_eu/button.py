@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
+import json
 import logging
-
+import os
 
 from datetime import datetime
 from homeassistant.components.button import ButtonEntity
@@ -30,6 +31,7 @@ async def async_setup_entry(
     for vehicle in coordinator.vehicles:
         entities.append(ZeekrForceUpdateButton(coordinator, vehicle.vin))
         entities.append(ZeekrFlashBlinkersButton(coordinator, vehicle.vin))
+        entities.append(ZeekrDumpApiButton(coordinator, vehicle.vin))
 
     async_add_entities(entities)
 
@@ -67,6 +69,109 @@ class ZeekrFlashBlinkersButton(ZeekrEntity, ButtonEntity):
             vehicle.do_remote_control, command, service_id, setting
         )
         _LOGGER.info("Flash blinkers requested for vehicle %s", self.vin)
+
+
+class ZeekrDumpApiButton(ZeekrEntity, ButtonEntity):
+    """Button to dump all API responses to JSON files."""
+
+    _attr_icon = "mdi:database-export"
+
+    def __init__(self, coordinator: ZeekrCoordinator, vin: str) -> None:
+        """Initialize the button."""
+        super().__init__(coordinator, vin)
+        self._attr_name = "Dump API Data"
+        self._attr_unique_id = f"{vin}_dump_api_data"
+        self._dump_count = 0
+
+    @property
+    def extra_state_attributes(self):
+        """Return extra state attributes."""
+        return {
+            "dump_count": self._dump_count,
+            "dump_dir": self._get_dump_dir(),
+        }
+
+    def _get_dump_dir(self) -> str:
+        """Get the dump directory path."""
+        return self.hass.config.path("zeekr_eu_dumps")
+
+    async def async_press(self) -> None:
+        """Handle the button press - dump all API responses."""
+        vehicle = self.coordinator.get_vehicle_by_vin(self.vin)
+        if not vehicle:
+            _LOGGER.error("Vehicle not found for VIN %s", self.vin)
+            return
+
+        _LOGGER.info("Starting API data dump for vehicle %s", self.vin)
+
+        # Fetch all raw responses
+        try:
+            raw_responses = await self.hass.async_add_executor_job(
+                self.coordinator.client.dump_all_raw_responses, self.vin
+            )
+        except Exception as e:
+            _LOGGER.error("Failed to fetch API data: %s", e)
+            return
+
+        # Also include the current coordinator data
+        coordinator_data = self.coordinator.data or {}
+        vehicle_coordinator_data = coordinator_data.get(self.vin, {})
+
+        # Create dump directory
+        dump_dir = self._get_dump_dir()
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        session_dir = os.path.join(dump_dir, f"{timestamp}_{self.vin[-4:]}")
+
+        await self.hass.async_add_executor_job(
+            self._write_dump_files, session_dir, raw_responses, vehicle_coordinator_data, timestamp
+        )
+
+        self._dump_count += 1
+        _LOGGER.info(
+            "API data dump #%d completed: %s (%d endpoints)",
+            self._dump_count,
+            session_dir,
+            len(raw_responses),
+        )
+
+    def _write_dump_files(
+        self,
+        session_dir: str,
+        raw_responses: dict,
+        coordinator_data: dict,
+        timestamp: str,
+    ) -> None:
+        """Write dump files to disk (runs in executor)."""
+        os.makedirs(session_dir, exist_ok=True)
+
+        # Write each endpoint response as separate file
+        for endpoint_name, response_data in raw_responses.items():
+            file_path = os.path.join(session_dir, f"{endpoint_name}.json")
+            with open(file_path, "w") as f:
+                json.dump(response_data, f, indent=2, default=str)
+
+        # Write the merged coordinator data
+        coord_path = os.path.join(session_dir, "coordinator_merged.json")
+        with open(coord_path, "w") as f:
+            json.dump(coordinator_data, f, indent=2, default=str)
+
+        # Write a summary/index file
+        summary = {
+            "timestamp": timestamp,
+            "vin": self.vin,
+            "endpoints_fetched": list(raw_responses.keys()),
+            "success_count": sum(
+                1 for r in raw_responses.values()
+                if isinstance(r, dict) and r.get("success", False)
+            ),
+            "error_count": sum(
+                1 for r in raw_responses.values()
+                if isinstance(r, dict) and "error" in r
+            ),
+        }
+        summary_path = os.path.join(session_dir, "_summary.json")
+        with open(summary_path, "w") as f:
+            json.dump(summary, f, indent=2)
 
 
 class ZeekrForceUpdateButton(ZeekrEntity, ButtonEntity):
