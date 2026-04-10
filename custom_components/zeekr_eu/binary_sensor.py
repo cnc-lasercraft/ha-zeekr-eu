@@ -240,7 +240,111 @@ async def async_setup_entry(
         # Charging needed - signals "I need power" based on configurable threshold
         entities.append(ZeekrChargingNeededBinarySensor(coordinator, vin))
 
+        # Notladung nötig — hysterese (on < notladung_start, off >= notladung_stop)
+        entities.append(ZeekrChargingUrgentBinarySensor(coordinator, vin))
+        # Laden bei Gelegenheit — on when SoC < laden_min_soc
+        entities.append(ZeekrChargingOpportunityBinarySensor(coordinator, vin))
+
     async_add_entities(entities)
+
+
+def _read_soc(coordinator, vin) -> float | None:
+    """Helper to read current state of charge as float, or None if unavailable."""
+    try:
+        val = (
+            coordinator.data.get(vin, {})
+            .get("additionalVehicleStatus", {})
+            .get("electricVehicleStatus", {})
+            .get("chargeLevel")
+        )
+        return float(val) if val not in (None, "") else None
+    except (ValueError, TypeError):
+        return None
+
+
+class ZeekrChargingUrgentBinarySensor(CoordinatorEntity, BinarySensorEntity):
+    """Hysteresis binary sensor: True when SoC < notladung_start, stays True until SoC >= notladung_stop."""
+
+    _attr_has_entity_name = True
+    _attr_device_class = BinarySensorDeviceClass.BATTERY
+    _attr_icon = "mdi:battery-alert"
+
+    def __init__(self, coordinator: ZeekrCoordinator, vin: str) -> None:
+        super().__init__(coordinator)
+        self.vin = vin
+        self._attr_name = "Notladung nötig"
+        self._attr_unique_id = f"{vin}_notladung_notig"
+
+    @property
+    def is_on(self) -> bool | None:
+        cfg = self.coordinator.get_config(self.vin)
+        soc = _read_soc(self.coordinator, self.vin)
+        if soc is None:
+            return cfg._notladung_notig_state
+
+        # Hysteresis logic
+        if cfg._notladung_notig_state:
+            if soc >= cfg.notladung_stop:
+                cfg._notladung_notig_state = False
+        else:
+            if soc < cfg.notladung_start:
+                cfg._notladung_notig_state = True
+        return cfg._notladung_notig_state
+
+    @property
+    def extra_state_attributes(self):
+        cfg = self.coordinator.get_config(self.vin)
+        return {
+            "state_of_charge": _read_soc(self.coordinator, self.vin),
+            "start_threshold": cfg.notladung_start,
+            "stop_threshold": cfg.notladung_stop,
+        }
+
+    @property
+    def device_info(self):
+        return {
+            "identifiers": {(DOMAIN, self.vin)},
+            "name": f"Zeekr {self.vin}",
+            "manufacturer": "Zeekr",
+        }
+
+
+class ZeekrChargingOpportunityBinarySensor(CoordinatorEntity, BinarySensorEntity):
+    """Binary sensor: True when SoC < laden_min_soc (opportunity to charge)."""
+
+    _attr_has_entity_name = True
+    _attr_device_class = BinarySensorDeviceClass.BATTERY
+    _attr_icon = "mdi:battery-charging-low"
+
+    def __init__(self, coordinator: ZeekrCoordinator, vin: str) -> None:
+        super().__init__(coordinator)
+        self.vin = vin
+        self._attr_name = "Laden bei Gelegenheit"
+        self._attr_unique_id = f"{vin}_laden_bei_gelegenheit"
+
+    @property
+    def is_on(self) -> bool | None:
+        soc = _read_soc(self.coordinator, self.vin)
+        if soc is None:
+            return None
+        cfg = self.coordinator.get_config(self.vin)
+        return soc < cfg.laden_min_soc
+
+    @property
+    def extra_state_attributes(self):
+        cfg = self.coordinator.get_config(self.vin)
+        return {
+            "state_of_charge": _read_soc(self.coordinator, self.vin),
+            "threshold": cfg.laden_min_soc,
+        }
+
+    @property
+    def device_info(self):
+        return {
+            "identifiers": {(DOMAIN, self.vin)},
+            "name": f"Zeekr {self.vin}",
+            "manufacturer": "Zeekr",
+        }
 
 
 class ZeekrChargingNeededBinarySensor(CoordinatorEntity, BinarySensorEntity):

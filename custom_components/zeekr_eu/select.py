@@ -12,6 +12,12 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.restore_state import RestoreEntity
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
+from .config_state import (
+    FARBE_OPTIONS,
+    LADEMODUS_OPTIONS,
+    MODELL_OPTIONS,
+    REIFENSAISON_OPTIONS,
+)
 from .const import DOMAIN
 from .coordinator import ZeekrCoordinator
 from .entity import ZeekrEntity
@@ -128,7 +134,75 @@ async def async_setup_entry(
         for slot_idx in range(NUM_SLOTS):
             entities.append(ZeekrSlotTageSelect(coordinator, vin, slot_idx))
 
+        # User config selects (migrated from legacy HA input_select helpers)
+        entities.append(ZeekrSettingsSelect(
+            coordinator, vin,
+            field="farbe", name="Farbe",
+            options=FARBE_OPTIONS, default="Moonlight White",
+            icon="mdi:palette",
+        ))
+        entities.append(ZeekrSettingsSelect(
+            coordinator, vin,
+            field="modell", name="Modell",
+            options=MODELL_OPTIONS, default="Zeekr 7X",
+            icon="mdi:car",
+        ))
+        entities.append(ZeekrSettingsSelect(
+            coordinator, vin,
+            field="lademodus", name="Lademodus",
+            options=LADEMODUS_OPTIONS, default="Sofort",
+            icon="mdi:ev-station",
+        ))
+        entities.append(ZeekrSettingsSelect(
+            coordinator, vin,
+            field="reifensaison", name="Reifensaison",
+            options=REIFENSAISON_OPTIONS, default="Sommer",
+            icon="mdi:tire",
+        ))
+
     async_add_entities(entities)
+
+
+class ZeekrSettingsSelect(ZeekrEntity, RestoreEntity, SelectEntity):
+    """Per-vehicle user configuration select, backed by ZeekrConfigState."""
+
+    _attr_has_entity_name = True
+    _attr_entity_category = EntityCategory.CONFIG
+
+    def __init__(
+        self,
+        coordinator: ZeekrCoordinator,
+        vin: str,
+        field: str,
+        name: str,
+        options: list[str],
+        default: str,
+        icon: str,
+    ) -> None:
+        super().__init__(coordinator, vin)
+        self._field = field
+        self._default = default
+        self._attr_options = list(options)
+        self._attr_name = name
+        self._attr_unique_id = f"{vin}_{field}"
+        self._attr_icon = icon
+
+    @property
+    def current_option(self) -> str | None:
+        val = getattr(self.coordinator.get_config(self.vin), self._field)
+        return val if val in self._attr_options else self._default
+
+    async def async_select_option(self, option: str) -> None:
+        if option not in self._attr_options:
+            return
+        setattr(self.coordinator.get_config(self.vin), self._field, option)
+        self.async_write_ha_state()
+
+    async def async_added_to_hass(self) -> None:
+        await super().async_added_to_hass()
+        last = await self.async_get_last_state()
+        if last and last.state in self._attr_options:
+            setattr(self.coordinator.get_config(self.vin), self._field, last.state)
 
 
 class ZeekrSlotTageSelect(ZeekrEntity, RestoreEntity, SelectEntity):

@@ -632,16 +632,16 @@ class ZeekrVehicleCard extends HTMLElement {
         this._defrosterEntity,
         this._sentryEntity,
         this._climateEntity,
-        "input_select.zeekr_reifensaison",
-        "input_number.zeekr_reifendruck_vorne_sommer",
-        "input_number.zeekr_reifendruck_hinten_sommer",
-        "input_number.zeekr_reifendruck_vorne_winter",
-        "input_number.zeekr_reifendruck_hinten_winter",
-        "input_select.zeekr_lademodus",
-        "input_number.zeekr_laden_min_soc",
-        "input_number.zeekr_laden_max_soc",
-        "input_number.zeekr_notladung_start",
-        "input_number.zeekr_notladung_stop",
+        "select.l6tza1s4xsn095278_reifensaison",
+        "number.l6tza1s4xsn095278_reifendruck_vorne_sommer",
+        "number.l6tza1s4xsn095278_reifendruck_hinten_sommer",
+        "number.l6tza1s4xsn095278_reifendruck_vorne_winter",
+        "number.l6tza1s4xsn095278_reifendruck_hinten_winter",
+        "select.l6tza1s4xsn095278_lademodus",
+        "number.l6tza1s4xsn095278_laden_min_soc",
+        "number.l6tza1s4xsn095278_laden_max_soc",
+        "number.l6tza1s4xsn095278_notladung_start",
+        "number.l6tza1s4xsn095278_notladung_stop",
         "switch.zeekr_5278_charging",
         "select.zeekr_l6tza1s4xsn095278_driver_seat_vent",
         "select.zeekr_l6tza1s4xsn095278_passenger_seat_vent",
@@ -731,14 +731,14 @@ class ZeekrVehicleCard extends HTMLElement {
     var tireTempRR = stateNum(h, e.tire_temp_rr);
 
     // Tire pressure targets from HA helpers
-    var season = stateVal(h, "input_select.zeekr_reifensaison");
+    var season = stateVal(h, "select.l6tza1s4xsn095278_reifensaison");
     var isWinter = season === "Winter";
     var targetF = stateNum(h, isWinter
-      ? "input_number.zeekr_reifendruck_vorne_winter"
-      : "input_number.zeekr_reifendruck_vorne_sommer") || (isWinter ? 2.7 : 2.5);
+      ? "number.l6tza1s4xsn095278_reifendruck_vorne_winter"
+      : "number.l6tza1s4xsn095278_reifendruck_vorne_sommer") || (isWinter ? 2.7 : 2.5);
     var targetR = stateNum(h, isWinter
-      ? "input_number.zeekr_reifendruck_hinten_winter"
-      : "input_number.zeekr_reifendruck_hinten_sommer") || (isWinter ? 2.7 : 2.5);
+      ? "number.l6tza1s4xsn095278_reifendruck_hinten_winter"
+      : "number.l6tza1s4xsn095278_reifendruck_hinten_sommer") || (isWinter ? 2.7 : 2.5);
 
     var locked = stateVal(h, this._lockEntity) === "locked";
     var lockColor = locked ? "#4caf50" : "#e53935";
@@ -822,11 +822,11 @@ class ZeekrVehicleCard extends HTMLElement {
                 var csMap = {'0': 'Getrennt', '1': 'Verbunden', '2': 'Laden', '3': 'Pausiert', '4': 'Fertig'};
                 var csText = csMap[cs] || cs || '';
                 var csColor = cs === '2' ? '#ff9800' : 'var(--secondary-text-color)';
-                var lademodus = stateVal(h, 'input_select.zeekr_lademodus') || 'Sofort';
-                var notStart = stateNum(h, 'input_number.zeekr_notladung_start');
-                var notStop = stateNum(h, 'input_number.zeekr_notladung_stop');
-                var komfort = stateNum(h, 'input_number.zeekr_laden_min_soc');
-                var maxSoc = stateNum(h, 'input_number.zeekr_laden_max_soc');
+                var lademodus = stateVal(h, 'select.l6tza1s4xsn095278_lademodus') || 'Sofort';
+                var notStart = stateNum(h, 'number.l6tza1s4xsn095278_notladung_start');
+                var notStop = stateNum(h, 'number.l6tza1s4xsn095278_notladung_stop');
+                var komfort = stateNum(h, 'number.l6tza1s4xsn095278_laden_min_soc');
+                var maxSoc = stateNum(h, 'number.l6tza1s4xsn095278_laden_max_soc');
                 var modeIcon = lademodus === 'Tariff Saver' ? 'mdi:currency-usd' : lademodus === 'Manuell' ? 'mdi:hand-back-right' : 'mdi:flash';
                 var statusLine = csText ? '<ha-icon icon="mdi:ev-station" style="--mdc-icon-size:16px;color:' + csColor + ';"></ha-icon> ' + csText : '';
                 var modeLine = '<ha-icon icon="' + modeIcon + '" style="--mdc-icon-size:16px;"></ha-icon> ' + lademodus;

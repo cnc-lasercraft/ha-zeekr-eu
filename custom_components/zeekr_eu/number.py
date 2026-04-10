@@ -70,7 +70,50 @@ async def async_setup_entry(
         # Globals
         entities.extend(_make_global_numbers(coordinator, vehicle.vin))
 
+        # User settings (migrated from legacy HA input_number helpers)
+        entities.extend(_make_settings_numbers(coordinator, vehicle.vin))
+
     async_add_entities(entities)
+
+
+def _make_settings_numbers(coordinator: ZeekrCoordinator, vin: str):
+    """Create per-vehicle user configuration number entities."""
+    return [
+        # Tire pressures
+        ZeekrSettingsNumber(
+            coordinator, vin, "reifendruck_vorne_sommer",
+            "Reifendruck Vorne Sommer", 1.5, 4.0, 0.1, "bar", "mdi:tire",
+        ),
+        ZeekrSettingsNumber(
+            coordinator, vin, "reifendruck_hinten_sommer",
+            "Reifendruck Hinten Sommer", 1.5, 4.0, 0.1, "bar", "mdi:tire",
+        ),
+        ZeekrSettingsNumber(
+            coordinator, vin, "reifendruck_vorne_winter",
+            "Reifendruck Vorne Winter", 1.5, 4.0, 0.1, "bar", "mdi:tire",
+        ),
+        ZeekrSettingsNumber(
+            coordinator, vin, "reifendruck_hinten_winter",
+            "Reifendruck Hinten Winter", 1.5, 4.0, 0.1, "bar", "mdi:tire",
+        ),
+        # Charge thresholds
+        ZeekrSettingsNumber(
+            coordinator, vin, "laden_max_soc",
+            "Laden Max SoC", 50, 100, 5, PERCENTAGE, "mdi:battery-arrow-up",
+        ),
+        ZeekrSettingsNumber(
+            coordinator, vin, "laden_min_soc",
+            "Laden Min SoC", 10, 100, 5, PERCENTAGE, "mdi:battery-arrow-down",
+        ),
+        ZeekrSettingsNumber(
+            coordinator, vin, "notladung_start",
+            "Notladung Start", 5, 50, 5, PERCENTAGE, "mdi:battery-alert",
+        ),
+        ZeekrSettingsNumber(
+            coordinator, vin, "notladung_stop",
+            "Notladung Stop", 5, 50, 5, PERCENTAGE, "mdi:battery-check",
+        ),
+    ]
 
 
 def _num_specs():
@@ -469,6 +512,54 @@ class ZeekrSofortNumber(_VorbereitungNumberBase):
             setattr(sofort, self._field, int(value))
         else:
             setattr(sofort, self._field, float(value))
+
+
+class ZeekrSettingsNumber(ZeekrEntity, RestoreNumber):
+    """Per-vehicle user configuration number, backed by ZeekrConfigState."""
+
+    _attr_has_entity_name = True
+    _attr_entity_category = EntityCategory.CONFIG
+
+    def __init__(
+        self,
+        coordinator: ZeekrCoordinator,
+        vin: str,
+        field: str,
+        name: str,
+        min_v: float,
+        max_v: float,
+        step: float,
+        unit: str | None,
+        icon: str,
+    ) -> None:
+        super().__init__(coordinator, vin)
+        self._field = field
+        self._attr_name = name
+        self._attr_unique_id = f"{vin}_{field}"
+        self._attr_native_min_value = min_v
+        self._attr_native_max_value = max_v
+        self._attr_native_step = step
+        if unit is not None:
+            self._attr_native_unit_of_measurement = unit
+        self._attr_icon = icon
+
+    @property
+    def native_value(self) -> float:
+        return float(getattr(self.coordinator.get_config(self.vin), self._field))
+
+    async def async_set_native_value(self, value: float) -> None:
+        setattr(self.coordinator.get_config(self.vin), self._field, float(value))
+        self.async_write_ha_state()
+
+    async def async_added_to_hass(self) -> None:
+        await super().async_added_to_hass()
+        last = await self.async_get_last_number_data()
+        if last and last.native_value is not None:
+            setattr(
+                self.coordinator.get_config(self.vin),
+                self._field,
+                float(last.native_value),
+            )
 
 
 class ZeekrGlobalNumber(_VorbereitungNumberBase):

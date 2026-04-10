@@ -15,6 +15,7 @@ from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, Upda
 import homeassistant.helpers.event as event
 
 
+from .config_state import ZeekrConfigState
 from .const import CONF_POLLING_INTERVAL, DEFAULT_POLLING_INTERVAL, DOMAIN
 from .request_stats import ZeekrRequestStats
 from .vorbereitung import VorbereitungScheduler, VorbereitungState
@@ -48,6 +49,8 @@ class ZeekrCoordinator(DataUpdateCoordinator):
         # Per-vehicle preconditioning state (populated after first refresh)
         self.vorbereitung: dict[str, VorbereitungState] = {}
         self.vorbereitung_scheduler: VorbereitungScheduler | None = None
+        # Per-vehicle user configuration (replaces legacy HA input_* helpers)
+        self.zeekr_config: dict[str, ZeekrConfigState] = {}
         polling_interval = entry.data.get(CONF_POLLING_INTERVAL, DEFAULT_POLLING_INTERVAL)
         super().__init__(
             hass,
@@ -87,6 +90,12 @@ class ZeekrCoordinator(DataUpdateCoordinator):
         if vin not in self.vorbereitung:
             self.vorbereitung[vin] = VorbereitungState()
         return self.vorbereitung[vin]
+
+    def get_config(self, vin: str) -> ZeekrConfigState:
+        """Return the user configuration for a VIN, creating it on demand."""
+        if vin not in self.zeekr_config:
+            self.zeekr_config[vin] = ZeekrConfigState()
+        return self.zeekr_config[vin]
 
     def start_vorbereitung_scheduler(self) -> None:
         """Start the per-coordinator preconditioning scheduler."""
