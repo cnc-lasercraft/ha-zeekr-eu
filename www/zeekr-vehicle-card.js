@@ -49,6 +49,7 @@ const LOCK_ENTITY = "lock.{prefix}_central_locking";
 const SWITCH_DEFROSTER = "switch.{prefix}_defroster";
 const SWITCH_SENTRY = "switch.{prefix}_sentry_mode";
 const SWITCH_STEERING_HEAT = "switch.{prefix}_steering_wheel_heat";
+const SWITCH_CHARGING = "switch.{prefix}_charging";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -595,6 +596,7 @@ class ZeekrVehicleCard extends HTMLElement {
     this._defrosterEntity = eid(SWITCH_DEFROSTER, this._prefix);
     this._sentryEntity = eid(SWITCH_SENTRY, this._prefix);
     this._steeringHeatEntity = eid(SWITCH_STEERING_HEAT, this._prefix);
+    this._chargingSwitchEntity = eid(SWITCH_CHARGING, this._prefix);
 
     this._vinResolved = false;
     this._climateEntity = null;
@@ -887,6 +889,10 @@ class ZeekrVehicleCard extends HTMLElement {
       + '<ha-icon icon="mdi:shield-car" style="--mdc-icon-size: 22px;"></ha-icon>'
       + '<span class="btn-label">Überwachung ' + (sentryOn ? 'Ein' : 'Aus') + '</span>'
       + '</button>'
+      + '<button class="action-btn' + (isCharging ? ' active' : '') + '" id="btn-charging">'
+      + '<ha-icon icon="mdi:battery-charging" style="--mdc-icon-size: 22px;"></ha-icon>'
+      + '<span class="btn-label">Laden ' + (isCharging ? 'Ein' : 'Aus') + '</span>'
+      + '</button>'
       + '</div>'
 
       + (function(seatHeatEntities) {
@@ -902,8 +908,10 @@ class ZeekrVehicleCard extends HTMLElement {
               var se = seatHeatEntities[sk];
               if (se) {
                 var sv = stateVal(h, se);
-                if (sv && sv !== 'off' && sv !== 'unavailable' && sv !== 'unknown') {
-                  items.push('<ha-icon icon="mdi:car-seat-heater" style="--mdc-icon-size:16px;color:#ff5722;"></ha-icon> ' + seatNames[sk] + ' ' + sv);
+                if (sv && sv !== 'unavailable' && sv !== 'unknown') {
+                  var isOff = (sv === 'Off' || sv === 'off');
+                  var seatColor = isOff ? '#4fc3f7' : '#e53935';
+                  items.push('<ha-icon icon="mdi:car-seat-heater" style="--mdc-icon-size:16px;color:' + seatColor + ';"></ha-icon> ' + seatNames[sk] + ' ' + sv);
                 }
               }
             }
@@ -962,6 +970,9 @@ class ZeekrVehicleCard extends HTMLElement {
 
     var btnSentry = this.shadowRoot.getElementById("btn-sentry");
     if (btnSentry) btnSentry.addEventListener("click", function () { self._toggleSwitch(self._sentryEntity); });
+
+    var btnCharging = this.shadowRoot.getElementById("btn-charging");
+    if (btnCharging) btnCharging.addEventListener("click", function () { self._toggleSwitch(self._chargingSwitchEntity); });
   }
 
   // --- Actions ---

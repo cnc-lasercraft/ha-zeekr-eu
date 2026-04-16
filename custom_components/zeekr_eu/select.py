@@ -14,7 +14,6 @@ from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .config_state import (
     FARBE_OPTIONS,
-    LADEMODUS_OPTIONS,
     MODELL_OPTIONS,
     REIFENSAISON_OPTIONS,
 )
@@ -146,12 +145,6 @@ async def async_setup_entry(
             field="modell", name="Modell",
             options=MODELL_OPTIONS, default="Zeekr 7X",
             icon="mdi:car",
-        ))
-        entities.append(ZeekrSettingsSelect(
-            coordinator, vin,
-            field="lademodus", name="Lademodus",
-            options=LADEMODUS_OPTIONS, default="Sofort",
-            icon="mdi:ev-station",
         ))
         entities.append(ZeekrSettingsSelect(
             coordinator, vin,

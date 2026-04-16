@@ -96,22 +96,29 @@ def _make_settings_numbers(coordinator: ZeekrCoordinator, vin: str):
             coordinator, vin, "reifendruck_hinten_winter",
             "Reifendruck Hinten Winter", 1.5, 4.0, 0.1, "bar", "mdi:tire",
         ),
-        # Charge thresholds
+        # Auto-Notladung (Default-Deadline): wenn User unter trigger_soc ankommt
+        # ohne manuelle Deadline, wird automatisch ziel_soc innerhalb stunden geplant.
         ZeekrSettingsNumber(
-            coordinator, vin, "laden_max_soc",
-            "Laden Max SoC", 50, 100, 5, PERCENTAGE, "mdi:battery-arrow-up",
+            coordinator, vin, "auto_notladung_trigger_soc",
+            "Auto Notladung Trigger SoC", 5, 50, 1, PERCENTAGE, "mdi:battery-alert-variant-outline",
         ),
         ZeekrSettingsNumber(
-            coordinator, vin, "laden_min_soc",
-            "Laden Min SoC", 10, 100, 5, PERCENTAGE, "mdi:battery-arrow-down",
+            coordinator, vin, "auto_notladung_ziel_soc",
+            "Auto Notladung Ziel SoC", 20, 80, 5, PERCENTAGE, "mdi:battery-charging-80",
         ),
         ZeekrSettingsNumber(
-            coordinator, vin, "notladung_start",
-            "Notladung Start", 5, 50, 5, PERCENTAGE, "mdi:battery-alert",
+            coordinator, vin, "auto_notladung_stunden",
+            "Auto Notladung Zeitfenster", 1, 48, 1, UnitOfTime.HOURS, "mdi:clock-time-eight-outline",
         ),
+        # Deadline (Ziel für scheduler-card + huawei_solar Ladeplanung)
         ZeekrSettingsNumber(
-            coordinator, vin, "notladung_stop",
-            "Notladung Stop", 5, 50, 5, PERCENTAGE, "mdi:battery-check",
+            coordinator, vin, "deadline_soc",
+            "Deadline SoC", 0, 100, 5, PERCENTAGE, "mdi:battery-charging-high",
+        ),
+        # PV-Überschuss-Ceiling: Obergrenze fürs Weiterladen nach Deadline
+        ZeekrSettingsNumber(
+            coordinator, vin, "pv_ceiling_soc",
+            "PV Ceiling SoC", 70, 100, 5, PERCENTAGE, "mdi:solar-power-variant",
         ),
     ]
 

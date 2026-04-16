@@ -55,6 +55,9 @@ async def async_setup_entry(
             )
         )
 
+        # Deadline scharf schalten (Input für huawei_solar Ladeplanung)
+        entities.append(ZeekrDeadlineAktivSwitch(coordinator, vin))
+
         # Vorbereitung config switches (per-slot, einmalig, sofort)
         for slot_idx in range(NUM_SLOTS):
             for field, label, icon in (
@@ -129,6 +132,37 @@ class _VorbereitungBoolSwitchBase(ZeekrEntity, RestoreEntity, SwitchEntity):
         last = await self.async_get_last_state()
         if last and last.state in ("on", "off"):
             self._write(last.state == "on")
+
+
+class ZeekrDeadlineAktivSwitch(ZeekrEntity, RestoreEntity, SwitchEntity):
+    """Toggle: Deadline ist scharf geschaltet. huawei_solar liest diesen Wert."""
+
+    _attr_has_entity_name = True
+    _attr_entity_category = EntityCategory.CONFIG
+    _attr_icon = "mdi:calendar-clock"
+
+    def __init__(self, coordinator: ZeekrCoordinator, vin: str) -> None:
+        super().__init__(coordinator, vin)
+        self._attr_name = "Deadline Aktiv"
+        self._attr_unique_id = f"{vin}_deadline_aktiv"
+
+    @property
+    def is_on(self) -> bool | None:
+        return bool(self.coordinator.get_config(self.vin).deadline_aktiv)
+
+    async def async_turn_on(self, **kwargs: Any) -> None:
+        self.coordinator.get_config(self.vin).deadline_aktiv = True
+        self.async_write_ha_state()
+
+    async def async_turn_off(self, **kwargs: Any) -> None:
+        self.coordinator.get_config(self.vin).deadline_aktiv = False
+        self.async_write_ha_state()
+
+    async def async_added_to_hass(self) -> None:
+        await super().async_added_to_hass()
+        last = await self.async_get_last_state()
+        if last and last.state in ("on", "off"):
+            self.coordinator.get_config(self.vin).deadline_aktiv = last.state == "on"
 
 
 class ZeekrSlotBoolSwitch(_VorbereitungBoolSwitchBase):
@@ -396,9 +430,13 @@ class ZeekrSwitch(CoordinatorEntity[ZeekrCoordinator], SwitchEntity):
 
         if setting:
             await self.coordinator.async_inc_invoke()
-            await self.hass.async_add_executor_job(
+            success = await self.hass.async_add_executor_job(
                 vehicle.do_remote_control, command, service_id, setting
             )
+
+            if not success and self.field != "charging":
+                _LOGGER.warning("Switch %s turn_on command failed", self.field)
+                return
 
             if self.field == "charging":
                 # Wait for backend confirmation for charging
@@ -501,9 +539,14 @@ class ZeekrSwitch(CoordinatorEntity[ZeekrCoordinator], SwitchEntity):
 
         if setting:
             await self.coordinator.async_inc_invoke()
-            await self.hass.async_add_executor_job(
+            success = await self.hass.async_add_executor_job(
                 vehicle.do_remote_control, command, service_id, setting
             )
+
+            if not success:
+                _LOGGER.warning("Switch %s turn_off command failed", self.field)
+                return
+
             self._update_local_state_optimistically(is_on=False)
             self.async_write_ha_state()
             if self.field == "sentry_mode":
