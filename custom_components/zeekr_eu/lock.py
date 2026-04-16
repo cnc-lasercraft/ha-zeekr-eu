@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 from typing import Any
 
 from homeassistant.components.lock import LockEntity
@@ -13,6 +14,8 @@ from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .const import DOMAIN
 from .coordinator import ZeekrCoordinator
+
+_LOGGER = logging.getLogger(__name__)
 
 # Delay before polling after a remote command (seconds)
 COMMAND_POLL_DELAY = 15
@@ -142,9 +145,13 @@ class ZeekrLock(CoordinatorEntity, LockEntity):
 
         if command and service_id and setting:
             await self.coordinator.async_inc_invoke()
-            await self.hass.async_add_executor_job(
+            success = await self.hass.async_add_executor_job(
                 vehicle.do_remote_control, command, service_id, setting
             )
+
+            if not success:
+                _LOGGER.warning("Lock command %s/%s failed", service_id, command)
+                return
 
             self._update_local_state_optimistically(locked=True)
             self.async_write_ha_state()
@@ -195,9 +202,13 @@ class ZeekrLock(CoordinatorEntity, LockEntity):
 
         if command and service_id and setting:
             await self.coordinator.async_inc_invoke()
-            await self.hass.async_add_executor_job(
+            success = await self.hass.async_add_executor_job(
                 vehicle.do_remote_control, command, service_id, setting
             )
+
+            if not success:
+                _LOGGER.warning("Unlock command %s/%s failed", service_id, command)
+                return
 
             self._update_local_state_optimistically(locked=False)
             self.async_write_ha_state()

@@ -6,6 +6,9 @@ from requests import Request
 from . import const, zeekr_app_sig, zeekr_hmac
 from .exceptions import AuthException
 
+# Timeout for all HTTP requests in seconds
+REQUEST_TIMEOUT = 30
+
 if TYPE_CHECKING:
     from .client import ZeekrClient
 
@@ -46,7 +49,7 @@ def customPost(client: "ZeekrClient", url: str, body: dict | None = None) -> Any
     req = zeekr_hmac.generateHMAC(req, client.hmac_access_key, client.hmac_secret_key)
 
     prepped = client.session.prepare_request(req)
-    resp = client.session.send(prepped)
+    resp = client.session.send(prepped, timeout=REQUEST_TIMEOUT)
     logger.debug("------ HEADERS ------")
     logger.debug(resp.headers)
     logger.debug("------ RESPONSE ------")
@@ -64,7 +67,7 @@ def customGet(client: "ZeekrClient", url: str) -> Any:
     req = zeekr_hmac.generateHMAC(req, client.hmac_access_key, client.hmac_secret_key)
 
     prepped = client.session.prepare_request(req)
-    resp = client.session.send(prepped)
+    resp = client.session.send(prepped, timeout=REQUEST_TIMEOUT)
     logger.debug("------ HEADERS ------")
     logger.debug(resp.headers)
     logger.debug("------ RESPONSE ------")
@@ -100,7 +103,7 @@ def appSignedPost(
         logger.debug(f"  {k}: {v}")
     logger.debug(f"Body: {final.body or ''}")
 
-    resp = client.session.send(final)
+    resp = client.session.send(final, timeout=REQUEST_TIMEOUT)
     logger.debug("------ HEADERS ------")
     logger.debug(resp.headers)
     logger.debug("------ RESPONSE ------")
@@ -140,7 +143,7 @@ def appSignedGet(
     prepped = client.session.prepare_request(req)
 
     final = zeekr_app_sig.sign_request(prepped, client.prod_secret)
-    resp = client.session.send(final)
+    resp = client.session.send(final, timeout=REQUEST_TIMEOUT)
     logger.debug("------ HEADERS ------")
     logger.debug(resp.headers)
     logger.debug("------ RESPONSE ------")

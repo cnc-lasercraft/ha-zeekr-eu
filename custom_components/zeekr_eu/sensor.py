@@ -101,6 +101,7 @@ async def async_setup_entry(
                 .get("chargeLevel"),
                 PERCENTAGE,
                 SensorDeviceClass.BATTERY,
+                SensorStateClass.MEASUREMENT,
             )
         )
         # Range (Battery Only)
@@ -115,6 +116,7 @@ async def async_setup_entry(
                 .get("distanceToEmptyOnBatteryOnly"),
                 UnitOfLength.KILOMETERS,
                 SensorDeviceClass.DISTANCE,
+                SensorStateClass.MEASUREMENT,
             )
         )
         # Odometer
@@ -144,6 +146,7 @@ async def async_setup_entry(
                 .get("interiorTemp"),
                 UnitOfTemperature.CELSIUS,
                 SensorDeviceClass.TEMPERATURE,
+                SensorStateClass.MEASUREMENT,
             )
         )
 
@@ -181,6 +184,7 @@ async def async_setup_entry(
                 .get("avgSpeed"),
                 UnitOfSpeed.KILOMETERS_PER_HOUR,
                 SensorDeviceClass.SPEED,
+                SensorStateClass.MEASUREMENT,
             )
         )
         # Trip 2 Average Consumption
@@ -195,6 +199,7 @@ async def async_setup_entry(
                 .get("averPowerConsumption"),
                 "kWh/100km",
                 None,
+                SensorStateClass.MEASUREMENT,
             )
         )
 
@@ -211,6 +216,7 @@ async def async_setup_entry(
                     .get(f"tyreStatus{t}"),
                     UnitOfPressure.KPA,
                     SensorDeviceClass.PRESSURE,
+                    SensorStateClass.MEASUREMENT,
                 )
             )
             entities.append(
@@ -224,6 +230,7 @@ async def async_setup_entry(
                     .get(f"tyreTemp{t}"),
                     UnitOfTemperature.CELSIUS,
                     SensorDeviceClass.TEMPERATURE,
+                    SensorStateClass.MEASUREMENT,
                 )
             )
 
@@ -239,6 +246,7 @@ async def async_setup_entry(
                     lambda d: d.get("chargingStatus", {}).get("chargeVoltage"),
                     UnitOfElectricPotential.VOLT,
                     SensorDeviceClass.VOLTAGE,
+                    SensorStateClass.MEASUREMENT,
                 )
             )
             # Charge Current
@@ -251,6 +259,7 @@ async def async_setup_entry(
                     lambda d: d.get("chargingStatus", {}).get("chargeCurrent"),
                     UnitOfElectricCurrent.AMPERE,
                     SensorDeviceClass.CURRENT,
+                    SensorStateClass.MEASUREMENT,
                 )
             )
             # Charge Power
@@ -263,6 +272,7 @@ async def async_setup_entry(
                     lambda d: d.get("chargingStatus", {}).get("chargePower"),
                     UnitOfPower.KILO_WATT,
                     SensorDeviceClass.POWER,
+                    SensorStateClass.MEASUREMENT,
                 )
             )
             # Charge Speed
@@ -275,6 +285,7 @@ async def async_setup_entry(
                     lambda d: d.get("chargingStatus", {}).get("chargeSpeed"),
                     "km/h",
                     None,
+                    SensorStateClass.MEASUREMENT,
                 )
             )
 
@@ -323,6 +334,7 @@ async def async_setup_entry(
                 .get("voltage"),
                 UnitOfElectricPotential.VOLT,
                 SensorDeviceClass.VOLTAGE,
+                SensorStateClass.MEASUREMENT,
             )
         )
         entities.append(
@@ -353,6 +365,7 @@ async def async_setup_entry(
                 .get("timeToFullyCharged"),
                 UnitOfTime.MINUTES,
                 SensorDeviceClass.DURATION,
+                SensorStateClass.MEASUREMENT,
             )
         )
 
@@ -368,6 +381,7 @@ async def async_setup_entry(
                 .get("distanceToEmptyOnBattery20Soc"),
                 UnitOfLength.KILOMETERS,
                 SensorDeviceClass.DISTANCE,
+                SensorStateClass.MEASUREMENT,
             )
         )
 
@@ -381,6 +395,7 @@ async def async_setup_entry(
                 lambda d: d.get("basicVehicleStatus", {}).get("speed"),
                 UnitOfSpeed.KILOMETERS_PER_HOUR,
                 SensorDeviceClass.SPEED,
+                SensorStateClass.MEASUREMENT,
             )
         )
         entities.append(
@@ -394,6 +409,7 @@ async def async_setup_entry(
                 .get("altitude"),
                 UnitOfLength.METERS,
                 SensorDeviceClass.DISTANCE,
+                SensorStateClass.MEASUREMENT,
             )
         )
         entities.append(
@@ -555,7 +571,7 @@ class ZeekrSensor(CoordinatorEntity, SensorEntity):
         value_fn,
         unit: str | None = None,
         device_class: SensorDeviceClass | None = None,
-        state_class: SensorStateClass | None = SensorStateClass.MEASUREMENT,
+        state_class: SensorStateClass | None = None,
     ) -> None:
         """Initialize the sensor."""
         super().__init__(coordinator)

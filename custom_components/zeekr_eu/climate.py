@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 from typing import Any
 
 from homeassistant.components.climate import (
@@ -18,6 +19,8 @@ from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .const import DOMAIN
 from .coordinator import ZeekrCoordinator
+
+_LOGGER = logging.getLogger(__name__)
 
 
 async def async_setup_entry(
@@ -129,9 +132,13 @@ class ZeekrClimate(CoordinatorEntity, ClimateEntity):
 
         if setting:
             await self.coordinator.async_inc_invoke()
-            await self.hass.async_add_executor_job(
+            success = await self.hass.async_add_executor_job(
                 vehicle.do_remote_control, command, service_id, setting
             )
+
+            if not success:
+                _LOGGER.warning("Climate command %s failed", service_id)
+                return
 
             # Optimistic update
             self._update_local_state_optimistically(hvac_mode)

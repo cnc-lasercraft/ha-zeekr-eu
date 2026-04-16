@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from typing import Any
 
 from homeassistant.components.cover import (
@@ -16,6 +17,8 @@ from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .const import DOMAIN
 from .coordinator import ZeekrCoordinator
+
+_LOGGER = logging.getLogger(__name__)
 
 
 async def async_setup_entry(
@@ -104,9 +107,12 @@ class ZeekrSunshade(CoordinatorEntity, CoverEntity):
         }
 
         await self.coordinator.async_inc_invoke()
-        await self.hass.async_add_executor_job(
+        success = await self.hass.async_add_executor_job(
             vehicle.do_remote_control, command, service_id, setting
         )
+        if not success:
+            _LOGGER.warning("Sunshade open command failed")
+            return
         self._update_local_state_optimistically(is_open=True)
         self.async_write_ha_state()
         await self.coordinator.async_request_refresh()
@@ -129,9 +135,12 @@ class ZeekrSunshade(CoordinatorEntity, CoverEntity):
         }
 
         await self.coordinator.async_inc_invoke()
-        await self.hass.async_add_executor_job(
+        success = await self.hass.async_add_executor_job(
             vehicle.do_remote_control, command, service_id, setting
         )
+        if not success:
+            _LOGGER.warning("Sunshade close command failed")
+            return
         self._update_local_state_optimistically(is_open=False)
         self.async_write_ha_state()
         await self.coordinator.async_request_refresh()
@@ -238,9 +247,12 @@ class ZeekrWindows(CoordinatorEntity, CoverEntity):
         }
 
         await self.coordinator.async_inc_invoke()
-        await self.hass.async_add_executor_job(
+        success = await self.hass.async_add_executor_job(
             vehicle.do_remote_control, command, service_id, setting
         )
+        if not success:
+            _LOGGER.warning("Windows open command failed")
+            return
         self._update_local_state_optimistically(is_open=True)
         self.async_write_ha_state()
         await self.coordinator.async_request_refresh()
@@ -263,9 +275,12 @@ class ZeekrWindows(CoordinatorEntity, CoverEntity):
         }
 
         await self.coordinator.async_inc_invoke()
-        await self.hass.async_add_executor_job(
+        success = await self.hass.async_add_executor_job(
             vehicle.do_remote_control, command, service_id, setting
         )
+        if not success:
+            _LOGGER.warning("Windows close command failed")
+            return
         self._update_local_state_optimistically(is_open=False)
         self.async_write_ha_state()
         await self.coordinator.async_request_refresh()
