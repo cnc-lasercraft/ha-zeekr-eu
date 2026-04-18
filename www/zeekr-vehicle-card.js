@@ -824,17 +824,9 @@ class ZeekrVehicleCard extends HTMLElement {
                 var csMap = {'0': 'Getrennt', '1': 'Verbunden', '2': 'Laden', '3': 'Pausiert', '4': 'Fertig'};
                 var csText = csMap[cs] || cs || '';
                 var csColor = cs === '2' ? '#ff9800' : 'var(--secondary-text-color)';
-                var lademodus = stateVal(h, 'select.l6tza1s4xsn095278_lademodus') || 'Sofort';
-                var notStart = stateNum(h, 'number.l6tza1s4xsn095278_notladung_start');
-                var notStop = stateNum(h, 'number.l6tza1s4xsn095278_notladung_stop');
-                var komfort = stateNum(h, 'number.l6tza1s4xsn095278_laden_min_soc');
-                var maxSoc = stateNum(h, 'number.l6tza1s4xsn095278_laden_max_soc');
-                var modeIcon = lademodus === 'Tariff Saver' ? 'mdi:currency-usd' : lademodus === 'Manuell' ? 'mdi:hand-back-right' : 'mdi:flash';
-                var statusLine = csText ? '<ha-icon icon="mdi:ev-station" style="--mdc-icon-size:16px;color:' + csColor + ';"></ha-icon> ' + csText : '';
-                var modeLine = '<ha-icon icon="' + modeIcon + '" style="--mdc-icon-size:16px;"></ha-icon> ' + lademodus;
-                var socLine = (maxSoc !== null) ? '<span style="opacity:0.6;"> → ' + maxSoc.toFixed(0) + '%</span>' : '';
+                if (!csText) return '';
                 return '<div style="text-align:center;font-size:13px;font-weight:500;color:' + csColor + ';margin-top:2px;line-height:1.6;">'
-                  + statusLine + (statusLine && modeLine ? '<br>' : '') + modeLine + socLine
+                  + '<ha-icon icon="mdi:ev-station" style="--mdc-icon-size:16px;color:' + csColor + ';"></ha-icon> ' + csText
                   + '</div>';
               })()
             + '</div>';
@@ -908,10 +900,8 @@ class ZeekrVehicleCard extends HTMLElement {
               var se = seatHeatEntities[sk];
               if (se) {
                 var sv = stateVal(h, se);
-                if (sv && sv !== 'unavailable' && sv !== 'unknown') {
-                  var isOff = (sv === 'Off' || sv === 'off');
-                  var seatColor = isOff ? '#4fc3f7' : '#e53935';
-                  items.push('<ha-icon icon="mdi:car-seat-heater" style="--mdc-icon-size:16px;color:' + seatColor + ';"></ha-icon> ' + seatNames[sk] + ' ' + sv);
+                if (sv && sv !== 'unavailable' && sv !== 'unknown' && sv !== 'Off' && sv !== 'off') {
+                  items.push('<ha-icon icon="mdi:car-seat-heater" style="--mdc-icon-size:16px;color:#e53935;"></ha-icon> ' + seatNames[sk] + ' ' + sv);
                 }
               }
             }
@@ -927,6 +917,24 @@ class ZeekrVehicleCard extends HTMLElement {
           if (doors.fl || doors.fr || doors.rl || doors.rr) items.push('<ha-icon icon="mdi:car-door" style="--mdc-icon-size:16px;color:#e53935;"></ha-icon> Tür offen');
           if (hoodOpen) items.push('<ha-icon icon="mdi:car" style="--mdc-icon-size:16px;color:#e53935;"></ha-icon> Motorhaube offen');
           if (trunkOpen) items.push('<ha-icon icon="mdi:car-back" style="--mdc-icon-size:16px;color:#e53935;"></ha-icon> Heckklappe offen');
+          // Fenster (irgendeines offen)
+          var anyWindowOpen = false;
+          ['driver', 'passenger', 'driverrear', 'passengerrear'].forEach(function(w) {
+            if (stateVal(h, 'cover.zeekr_5278_window_' + w) === 'open') anyWindowOpen = true;
+          });
+          if (anyWindowOpen) items.push('<ha-icon icon="mdi:window-open-variant" style="--mdc-icon-size:16px;color:#e53935;"></ha-icon> Fenster offen');
+          // Schiebedach
+          var sunroofPos = stateNum(h, 'sensor.zeekr_l6tza1s4xsn095278_zeekr_5278_sunroof_position');
+          if (sunroofPos !== null && sunroofPos > 0 && sunroofPos < 101) items.push('<ha-icon icon="mdi:car-select" style="--mdc-icon-size:16px;color:#4fc3f7;"></ha-icon> Schiebedach offen');
+          // Sonnenrollo Innenraum
+          if (stateVal(h, 'cover.zeekr_5278_sunshade') === 'open') items.push('<ha-icon icon="mdi:blinds-open" style="--mdc-icon-size:16px;color:#4fc3f7;"></ha-icon> Sonnenrollo offen');
+          // Heck-Sonnenschutz
+          var curtainRearPos = stateNum(h, 'sensor.zeekr_l6tza1s4xsn095278_zeekr_5278_sun_curtain_rear_position');
+          if (curtainRearPos !== null && curtainRearPos > 0 && curtainRearPos < 101) items.push('<ha-icon icon="mdi:blinds-horizontal" style="--mdc-icon-size:16px;color:#4fc3f7;"></ha-icon> Heck-Sonnenschutz offen');
+          // Duft
+          if (isOn(h, 'binary_sensor.zeekr_l6tza1s4xsn095278_zeekr_5278_fragrance_active')) items.push('<ha-icon icon="mdi:spray" style="--mdc-icon-size:16px;color:#ab47bc;"></ha-icon> Duft aktiv');
+          // Motor läuft
+          if (isOn(h, 'binary_sensor.zeekr_l6tza1s4xsn095278_zeekr_5278_engine_running')) items.push('<ha-icon icon="mdi:engine" style="--mdc-icon-size:16px;color:#66bb6a;"></ha-icon> Motor läuft');
           var tireWarnPos = ['driver', 'passenger', 'driverrear', 'passengerrear'];
           var tireWarnNames = ['VL', 'VR', 'HL', 'HR'];
           for (var tw = 0; tw < 4; tw++) {
@@ -935,9 +943,11 @@ class ZeekrVehicleCard extends HTMLElement {
           }
 
           if (items.length === 0) return '';
-          return '<div style="margin-top:10px;padding:8px 10px;background:rgba(128,128,128,0.08);border-radius:8px;font-size:13px;line-height:1.8;">'
+          return '<div style="margin-top:10px;padding:8px 10px;background:rgba(128,128,128,0.08);border-radius:8px;font-size:13px;line-height:1.6;">'
             + '<div style="font-size:11px;opacity:0.5;margin-bottom:4px;">AKTIV</div>'
-            + items.join('<br>')
+            + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:2px 12px;">'
+            + items.map(function(i){return '<span>' + i + '</span>';}).join('')
+            + '</div>'
             + '</div>';
         })(this._seatHeatEntities)
 
