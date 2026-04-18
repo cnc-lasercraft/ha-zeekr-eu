@@ -120,6 +120,23 @@ def _make_settings_numbers(coordinator: ZeekrCoordinator, vin: str):
             coordinator, vin, "pv_ceiling_soc",
             "PV Ceiling SoC", 70, 100, 5, PERCENTAGE, "mdi:solar-power-variant",
         ),
+        # Herold-Benachrichtigungs-Schwellwerte
+        ZeekrSettingsNumber(
+            coordinator, vin, "warnung_akku_soc",
+            "Warnung Akku SoC", 5, 50, 1, PERCENTAGE, "mdi:battery-alert",
+        ),
+        ZeekrSettingsNumber(
+            coordinator, vin, "warnung_offen_min",
+            "Warnung Tuer Fenster offen", 1, 120, 1, UnitOfTime.MINUTES, "mdi:door-open",
+        ),
+        ZeekrSettingsNumber(
+            coordinator, vin, "warnung_unverriegelt_min",
+            "Warnung unverriegelt", 1, 240, 1, UnitOfTime.MINUTES, "mdi:lock-open-variant",
+        ),
+        ZeekrSettingsNumber(
+            coordinator, vin, "warnung_deadline_vorlauf_min",
+            "Warnung Deadline Vorlauf", 0, 240, 5, UnitOfTime.MINUTES, "mdi:bell-outline",
+        ),
     ]
 
 

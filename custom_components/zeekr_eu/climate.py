@@ -19,6 +19,7 @@ from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .const import DOMAIN
 from .coordinator import ZeekrCoordinator
+from .herold import async_notify as herold_notify
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -138,6 +139,13 @@ class ZeekrClimate(CoordinatorEntity, ClimateEntity):
 
             if not success:
                 _LOGGER.warning("Climate command %s failed", service_id)
+                await herold_notify(
+                    self.hass,
+                    topic="zeekr/remote/fehlgeschlagen",
+                    titel=f"Zeekr {self.vin[-4:] if self.vin else ''}: Klima-Befehl",
+                    message=f"Climate-Kommando {service_id} wurde nicht bestätigt.",
+                    severity="warnung",
+                )
                 return
 
             # Optimistic update

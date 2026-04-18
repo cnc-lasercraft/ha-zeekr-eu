@@ -47,6 +47,12 @@ class ZeekrConfigState:
     deadline_soc: float = 80.0
     deadline_aktiv: bool = False
 
+    # Herold-Benachrichtigungs-Schwellwerte
+    warnung_akku_soc: float = 20.0           # %: Warnung wenn SoC darunter und nicht am Kabel
+    warnung_offen_min: int = 10              # Min: Tür/Fenster offen bevor Warnung
+    warnung_unverriegelt_min: int = 30       # Min: unverriegelt bevor Warnung
+    warnung_deadline_vorlauf_min: int = 60   # Min vor Deadline: "nicht eingesteckt"-Warnung
+
     # Tires
     reifensaison: str = "Sommer"
     reifendruck_vorne_sommer: float = 2.5

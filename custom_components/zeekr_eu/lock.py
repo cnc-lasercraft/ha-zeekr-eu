@@ -14,6 +14,7 @@ from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .const import DOMAIN
 from .coordinator import ZeekrCoordinator
+from .herold import async_notify as herold_notify
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -151,6 +152,13 @@ class ZeekrLock(CoordinatorEntity, LockEntity):
 
             if not success:
                 _LOGGER.warning("Lock command %s/%s failed", service_id, command)
+                await herold_notify(
+                    self.hass,
+                    topic="zeekr/remote/fehlgeschlagen",
+                    titel=f"Zeekr {self.vin[-4:] if self.vin else ''}: Lock-Befehl",
+                    message=f"Lock {service_id}/{command} wurde nicht bestätigt.",
+                    severity="warnung",
+                )
                 return
 
             self._update_local_state_optimistically(locked=True)
@@ -208,6 +216,13 @@ class ZeekrLock(CoordinatorEntity, LockEntity):
 
             if not success:
                 _LOGGER.warning("Unlock command %s/%s failed", service_id, command)
+                await herold_notify(
+                    self.hass,
+                    topic="zeekr/remote/fehlgeschlagen",
+                    titel=f"Zeekr {self.vin[-4:] if self.vin else ''}: Unlock-Befehl",
+                    message=f"Unlock {service_id}/{command} wurde nicht bestätigt.",
+                    severity="warnung",
+                )
                 return
 
             self._update_local_state_optimistically(locked=False)

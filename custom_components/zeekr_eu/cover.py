@@ -17,6 +17,7 @@ from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .const import DOMAIN
 from .coordinator import ZeekrCoordinator
+from .herold import async_notify as herold_notify
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -112,6 +113,13 @@ class ZeekrSunshade(CoordinatorEntity, CoverEntity):
         )
         if not success:
             _LOGGER.warning("Sunshade open command failed")
+            await herold_notify(
+                self.hass,
+                topic="zeekr/remote/fehlgeschlagen",
+                titel=f"Zeekr {self.vin[-4:] if self.vin else ''}: Sonnenrollo",
+                message="Sunshade open wurde nicht bestätigt.",
+                severity="warnung",
+            )
             return
         self._update_local_state_optimistically(is_open=True)
         self.async_write_ha_state()
@@ -140,6 +148,13 @@ class ZeekrSunshade(CoordinatorEntity, CoverEntity):
         )
         if not success:
             _LOGGER.warning("Sunshade close command failed")
+            await herold_notify(
+                self.hass,
+                topic="zeekr/remote/fehlgeschlagen",
+                titel=f"Zeekr {self.vin[-4:] if self.vin else ''}: Sonnenrollo",
+                message="Sunshade close wurde nicht bestätigt.",
+                severity="warnung",
+            )
             return
         self._update_local_state_optimistically(is_open=False)
         self.async_write_ha_state()
@@ -252,6 +267,13 @@ class ZeekrWindows(CoordinatorEntity, CoverEntity):
         )
         if not success:
             _LOGGER.warning("Windows open command failed")
+            await herold_notify(
+                self.hass,
+                topic="zeekr/remote/fehlgeschlagen",
+                titel=f"Zeekr {self.vin[-4:] if self.vin else ''}: Fenster",
+                message="Fenster öffnen wurde nicht bestätigt.",
+                severity="warnung",
+            )
             return
         self._update_local_state_optimistically(is_open=True)
         self.async_write_ha_state()
@@ -280,6 +302,13 @@ class ZeekrWindows(CoordinatorEntity, CoverEntity):
         )
         if not success:
             _LOGGER.warning("Windows close command failed")
+            await herold_notify(
+                self.hass,
+                topic="zeekr/remote/fehlgeschlagen",
+                titel=f"Zeekr {self.vin[-4:] if self.vin else ''}: Fenster",
+                message="Fenster schliessen wurde nicht bestätigt.",
+                severity="warnung",
+            )
             return
         self._update_local_state_optimistically(is_open=False)
         self.async_write_ha_state()

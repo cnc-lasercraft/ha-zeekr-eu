@@ -17,6 +17,7 @@ from homeassistant.helpers.update_coordinator import CoordinatorEntity
 from .const import DOMAIN
 from .coordinator import ZeekrCoordinator
 from .entity import ZeekrEntity
+from .herold import async_notify as herold_notify
 from .vorbereitung import NUM_SLOTS
 
 _LOGGER = logging.getLogger(__name__)
@@ -436,6 +437,13 @@ class ZeekrSwitch(CoordinatorEntity[ZeekrCoordinator], SwitchEntity):
 
             if not success and self.field != "charging":
                 _LOGGER.warning("Switch %s turn_on command failed", self.field)
+                await herold_notify(
+                    self.hass,
+                    topic="zeekr/remote/fehlgeschlagen",
+                    titel=f"Zeekr {self.vin[-4:] if self.vin else ''}: Switch {self.field}",
+                    message=f"Turn-on für {self.field} wurde nicht bestätigt.",
+                    severity="warnung",
+                )
                 return
 
             if self.field == "charging":
@@ -465,6 +473,13 @@ class ZeekrSwitch(CoordinatorEntity[ZeekrCoordinator], SwitchEntity):
                     self._update_local_state_optimistically(is_on=True)
                 else:
                     self._update_local_state_optimistically(is_on=False)
+                    await herold_notify(
+                        self.hass,
+                        topic="zeekr/remote/fehlgeschlagen",
+                        titel=f"Zeekr {self.vin[-4:] if self.vin else ''}: Laden starten",
+                        message="Ladung wurde innerhalb 30 s nicht bestätigt.",
+                        severity="warnung",
+                    )
                 self.async_write_ha_state()
             elif self.field == "sentry_mode":
                 self._update_local_state_optimistically(is_on=True)
@@ -545,6 +560,13 @@ class ZeekrSwitch(CoordinatorEntity[ZeekrCoordinator], SwitchEntity):
 
             if not success:
                 _LOGGER.warning("Switch %s turn_off command failed", self.field)
+                await herold_notify(
+                    self.hass,
+                    topic="zeekr/remote/fehlgeschlagen",
+                    titel=f"Zeekr {self.vin[-4:] if self.vin else ''}: Switch {self.field}",
+                    message=f"Turn-off für {self.field} wurde nicht bestätigt.",
+                    severity="warnung",
+                )
                 return
 
             self._update_local_state_optimistically(is_on=False)

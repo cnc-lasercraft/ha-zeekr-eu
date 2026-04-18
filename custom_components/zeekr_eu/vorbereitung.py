@@ -262,6 +262,10 @@ class VorbereitungScheduler:
             )
         except Exception as exc:  # noqa: BLE001
             _LOGGER.error("Vorbereitung: failed to call preconditioning_start: %s", exc)
+            return
+        # Herold-Notifications werden im preconditioning_start Service-Handler
+        # (__init__.py) ausgelöst — damit feuern sie unabhängig vom Trigger
+        # (Slot, Einmalig, Sofort-Button, manueller Service-Call).
 
     def _read_outside_temp(self) -> float | None:
         """Read the outside temperature from the configured HA sensor."""

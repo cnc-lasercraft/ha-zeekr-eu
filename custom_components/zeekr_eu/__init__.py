@@ -6,6 +6,7 @@ import voluptuous as vol
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, ServiceCall
 from homeassistant.exceptions import ConfigEntryNotReady, HomeAssistantError
+from homeassistant.helpers.event import async_call_later
 from homeassistant.helpers.typing import ConfigType
 import homeassistant.helpers.config_validation as cv
 
@@ -25,6 +26,7 @@ from .const import (
     STARTUP_MESSAGE,
 )
 from .coordinator import ZeekrCoordinator
+from .herold import async_notify as herold_notify, async_register_topics
 from .request_stats import ZeekrRequestStats
 
 SERVICE_PRECONDITIONING_START = "preconditioning_start"
@@ -115,6 +117,13 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry):
             await hass.async_add_executor_job(client.login)
         except Exception as ex:
             _LOGGER.error("Could not log in to Zeekr API: %s", ex)
+            await herold_notify(
+                hass,
+                topic="zeekr/api/fehler",
+                titel="Zeekr API Login fehlgeschlagen",
+                message=f"Anmeldung an die Zeekr API ist fehlgeschlagen: {ex}",
+                severity="warnung",
+            )
             raise ConfigEntryNotReady from ex
 
     coordinator = ZeekrCoordinator(hass, client=client, entry=entry)
@@ -134,6 +143,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry):
 
     # Start the preconditioning scheduler now that we have vehicles
     coordinator.start_vorbereitung_scheduler()
+
+    # Register Herold topics (idempotent, skipped if Herold isn't installed)
+    await async_register_topics(hass)
 
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
 
@@ -198,10 +210,40 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry):
             )
 
             await target_coordinator.async_inc_invoke()
-            await hass.async_add_executor_job(
+            success = await hass.async_add_executor_job(
                 vehicle.do_remote_control, "start", "ZAF", setting
             )
             await target_coordinator.async_request_refresh()
+
+            short_vin = vin[-4:] if vin else ""
+            if not success:
+                await herold_notify(
+                    hass,
+                    topic="zeekr/remote/fehlgeschlagen",
+                    titel=f"Zeekr {short_vin}: Vorheizen",
+                    message="Preconditioning-Kommando wurde von der Zeekr-Cloud abgelehnt.",
+                    severity="warnung",
+                )
+                return
+
+            await herold_notify(
+                hass,
+                topic="zeekr/vorheizen/fertig",
+                titel=f"Zeekr {short_vin}: Vorheizen gestartet",
+                message=f"Preconditioning laeuft fuer {duration} Min ({ac_temp} °C).",
+                severity="info",
+            )
+
+            if duration > 0:
+                async def _notify_done(_now) -> None:
+                    await herold_notify(
+                        hass,
+                        topic="zeekr/vorheizen/fertig",
+                        titel=f"Zeekr {short_vin}: Vorheizen fertig",
+                        message=f"Preconditioning-Lauf ({duration} Min) abgeschlossen.",
+                        severity="info",
+                    )
+                async_call_later(hass, duration * 60, _notify_done)
 
         hass.services.async_register(
             DOMAIN,
