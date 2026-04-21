@@ -240,6 +240,9 @@ async def async_setup_entry(
         # Charging needed - signals "I need power" based on configurable threshold
         entities.append(ZeekrChargingNeededBinarySensor(coordinator, vin))
 
+        # PV Ladewunsch - signals "accept PV surplus" based on per-VIN ceiling
+        entities.append(ZeekrPvLadewunschBinarySensor(coordinator, vin))
+
     async_add_entities(entities)
 
 
@@ -301,6 +304,61 @@ class ZeekrChargingNeededBinarySensor(CoordinatorEntity, BinarySensorEntity):
         return {
             "state_of_charge": self._current_soc(),
             "threshold": self._threshold(),
+        }
+
+    @property
+    def device_info(self):
+        """Return device info."""
+        return {
+            "identifiers": {(DOMAIN, self.vin)},
+            "name": f"Zeekr {self.vin}",
+            "manufacturer": "Zeekr",
+        }
+
+
+class ZeekrPvLadewunschBinarySensor(CoordinatorEntity, BinarySensorEntity):
+    """Binary sensor that reports True when SoC is below the per-VIN PV ceiling."""
+
+    _attr_icon = "mdi:solar-power-variant"
+
+    def __init__(self, coordinator: ZeekrCoordinator, vin: str) -> None:
+        """Initialize the entity."""
+        super().__init__(coordinator)
+        self.vin = vin
+        self._attr_name = f"Zeekr {vin[-4:] if vin else ''} PV Ladewunsch"
+        self._attr_unique_id = f"{vin}_pv_ladewunsch"
+
+    def _current_soc(self) -> float | None:
+        """Return current state of charge as float or None."""
+        try:
+            val = (
+                self.coordinator.data.get(self.vin, {})
+                .get("additionalVehicleStatus", {})
+                .get("electricVehicleStatus", {})
+                .get("chargeLevel")
+            )
+            return float(val) if val not in (None, "") else None
+        except (ValueError, TypeError):
+            return None
+
+    def _ceiling(self) -> float:
+        """Return per-VIN PV ceiling SoC."""
+        return float(self.coordinator.get_config(self.vin).pv_ceiling_soc)
+
+    @property
+    def is_on(self) -> bool | None:
+        """Return true if SoC is below the PV ceiling."""
+        soc = self._current_soc()
+        if soc is None:
+            return None
+        return soc < self._ceiling()
+
+    @property
+    def extra_state_attributes(self):
+        """Expose SoC and ceiling for diagnostics."""
+        return {
+            "state_of_charge": self._current_soc(),
+            "pv_ceiling_soc": self._ceiling(),
         }
 
     @property
