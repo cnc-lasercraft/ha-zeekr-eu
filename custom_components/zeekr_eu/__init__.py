@@ -202,6 +202,11 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry):
                     "preconditioning_start called with no active components"
                 )
 
+            # Append operation=4 — required by Zeekr cloud for ZAF (EnvRegulation)
+            # preconditioning-start. Without it the car silently drops most
+            # subsystems (observed 2026-04-20: only SW/steering-wheel was applied).
+            params.append({"key": "operation", "value": "4"})
+
             setting = {"serviceParameters": params}
 
             _LOGGER.info(
@@ -214,6 +219,13 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry):
                 vehicle.do_remote_control, "start", "ZAF", setting
             )
             await target_coordinator.async_request_refresh()
+
+            # The car takes ~60-90s to report preClimateActive=true after ZAF.
+            # Trigger an extra refresh around that window so the UI updates
+            # faster than the next scheduled poll.
+            async def _delayed_refresh(_now) -> None:
+                await target_coordinator.async_request_refresh()
+            async_call_later(hass, 75, _delayed_refresh)
 
             short_vin = vin[-4:] if vin else ""
             if not success:

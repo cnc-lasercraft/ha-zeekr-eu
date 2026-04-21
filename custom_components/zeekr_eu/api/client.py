@@ -362,6 +362,10 @@ class ZeekrClient:
         if not self.bearer_token:
             raise AuthException(f"No bearer token in response: {bearer_login_data}")
 
+        # Needed for ZAF/preconditioning flat-body requests.
+        if user_id := bearer_login_data.get("userId"):
+            self.user_info["userId"] = str(user_id)
+
         self.logged_in_headers["authorization"] = self.bearer_token
 
     def get_vehicle_list(self) -> list["Vehicle"]:
@@ -478,7 +482,11 @@ class ZeekrClient:
         else:
             endpoint = const.REMOTECONTROL_URL
 
-        body = {"command": command, "serviceId": serviceID, "setting": setting}
+        body: Dict[str, Any] = {
+            "command": command,
+            "serviceId": serviceID,
+            "setting": setting,
+        }
 
         remote_control_block = network.appSignedPost(
             self,
