@@ -28,19 +28,30 @@ from .const import (
 from .coordinator import ZeekrCoordinator
 from .herold import async_notify as herold_notify, async_register_topics
 from .request_stats import ZeekrRequestStats
+from .vorbereitung import (
+    KLIMA_MODUS_AC,
+    KLIMA_MODUS_AUS,
+    KLIMA_MODUS_COOLING_MAX,
+    KLIMA_MODUS_DEFROST,
+    KLIMA_MODUS_HEIZEN_MAX,
+    KLIMA_MODUS_OPTIONS,
+)
 
 SERVICE_PRECONDITIONING_START = "preconditioning_start"
+SERVICE_PRECONDITIONING_STOP = "preconditioning_stop"
+
+PRECONDITIONING_STOP_SCHEMA = vol.Schema({vol.Required("vin"): cv.string})
 
 PRECONDITIONING_SCHEMA = vol.Schema(
     {
         vol.Required("vin"): cv.string,
+        vol.Optional("klima_modus", default=KLIMA_MODUS_AC): vol.In(KLIMA_MODUS_OPTIONS),
         vol.Optional("ac_temp", default=21): vol.All(
             vol.Coerce(float), vol.Range(min=0, max=30)
         ),
         vol.Optional("duration_min", default=15): vol.All(
             vol.Coerce(int), vol.Range(min=1, max=60)
         ),
-        vol.Optional("defrost", default=False): cv.boolean,
         vol.Optional("steering_wheel", default=False): cv.boolean,
         vol.Optional("seat_driver", default=0): vol.All(
             vol.Coerce(int), vol.Range(min=0, max=3)
@@ -169,35 +180,61 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry):
 
             vehicle = target_coordinator.get_vehicle_by_vin(vin)
 
+            # Klima subsystems are mutually exclusive on the car (activating
+            # one cancels the others). We expose this as a single klima_modus
+            # choice and set exactly one of AC/DF/RC/RW to true — the rest
+            # to false. SW and SH.* run orthogonally.
+            # The Android app always sends the base key for each subsystem it
+            # touches as "true"/"false" plus detail keys only when true; we
+            # mirror that to avoid the firmware silently dropping parameters.
+            modus = call.data["klima_modus"]
+            ac_temp = call.data["ac_temp"]
+
             params: list[dict[str, str]] = []
 
-            # AC: only include if temp > 0
-            ac_temp = call.data["ac_temp"]
-            if ac_temp > 0:
-                params.append({"key": "AC", "value": "true"})
+            # AC
+            ac_active = modus == KLIMA_MODUS_AC
+            params.append({"key": "AC", "value": "true" if ac_active else "false"})
+            if ac_active:
                 params.append({"key": "AC.temp", "value": str(ac_temp)})
                 params.append({"key": "AC.duration", "value": str(duration)})
 
             # Defrost
-            if call.data["defrost"]:
-                params.append({"key": "DF", "value": "true"})
+            df_active = modus == KLIMA_MODUS_DEFROST
+            params.append({"key": "DF", "value": "true" if df_active else "false"})
+            if df_active:
                 params.append({"key": "DF.level", "value": "2"})
 
-            # Steering wheel heating
-            if call.data["steering_wheel"]:
-                params.append({"key": "SW", "value": "true"})
+            # Rapid Warming (Heizen Max)
+            rw_active = modus == KLIMA_MODUS_HEIZEN_MAX
+            params.append({"key": "RW", "value": "true" if rw_active else "false"})
+
+            # Rapid Cooling (Cooling Max)
+            rc_active = modus == KLIMA_MODUS_COOLING_MAX
+            params.append({"key": "RC", "value": "true" if rc_active else "false"})
+
+            # Steering wheel heating (orthogonal)
+            sw_active = call.data["steering_wheel"]
+            params.append({"key": "SW", "value": "true" if sw_active else "false"})
+            if sw_active:
                 params.append({"key": "SW.level", "value": "3"})
                 params.append({"key": "SW.duration", "value": str(duration)})
 
-            # Seat heat (4 seats)
+            # Seat heat 4× (orthogonal)
+            seat_active_any = False
             for seat_field, service_code in SEAT_SERVICE_CODES.items():
                 level = call.data[seat_field]
-                if level > 0:
-                    params.append({"key": service_code, "value": "true"})
+                seat_active = level > 0
+                params.append(
+                    {"key": service_code, "value": "true" if seat_active else "false"}
+                )
+                if seat_active:
                     params.append({"key": f"{service_code}.level", "value": str(level)})
                     params.append({"key": f"{service_code}.duration", "value": str(duration)})
+                    seat_active_any = True
 
-            if not params:
+            klima_active = modus != KLIMA_MODUS_AUS
+            if not (klima_active or sw_active or seat_active_any):
                 raise HomeAssistantError(
                     "preconditioning_start called with no active components"
                 )
@@ -262,6 +299,73 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry):
             SERVICE_PRECONDITIONING_START,
             _handle_preconditioning_start,
             schema=PRECONDITIONING_SCHEMA,
+        )
+
+    if not hass.services.has_service(DOMAIN, SERVICE_PRECONDITIONING_STOP):
+        async def _handle_preconditioning_stop(call: ServiceCall) -> None:
+            vin = call.data["vin"]
+
+            target_coordinator: ZeekrCoordinator | None = None
+            for coord in hass.data[DOMAIN].values():
+                if not isinstance(coord, ZeekrCoordinator):
+                    continue
+                if coord.get_vehicle_by_vin(vin):
+                    target_coordinator = coord
+                    break
+            if target_coordinator is None:
+                raise HomeAssistantError(f"No vehicle with VIN {vin} found")
+
+            vehicle = target_coordinator.get_vehicle_by_vin(vin)
+
+            # Send every subsystem as false — mirrors the app's "all off" call.
+            params: list[dict[str, str]] = [
+                {"key": "AC", "value": "false"},
+                {"key": "DF", "value": "false"},
+                {"key": "RW", "value": "false"},
+                {"key": "RC", "value": "false"},
+                {"key": "SW", "value": "false"},
+            ]
+            for service_code in SEAT_SERVICE_CODES.values():
+                params.append({"key": service_code, "value": "false"})
+            params.append({"key": "operation", "value": "4"})
+
+            setting = {"serviceParameters": params}
+            _LOGGER.info("preconditioning_stop for %s", vin)
+
+            await target_coordinator.async_inc_invoke()
+            success = await hass.async_add_executor_job(
+                vehicle.do_remote_control, "start", "ZAF", setting
+            )
+            await target_coordinator.async_request_refresh()
+
+            async def _delayed_refresh(_now) -> None:
+                await target_coordinator.async_request_refresh()
+            async_call_later(hass, 75, _delayed_refresh)
+
+            short_vin = vin[-4:] if vin else ""
+            if not success:
+                await herold_notify(
+                    hass,
+                    topic="zeekr/remote/fehlgeschlagen",
+                    titel=f"Zeekr {short_vin}: Vorklimatisieren Stop",
+                    message="Stop-Kommando wurde von der Zeekr-Cloud abgelehnt.",
+                    severity="warnung",
+                )
+                return
+
+            await herold_notify(
+                hass,
+                topic="zeekr/vorheizen/fertig",
+                titel=f"Zeekr {short_vin}: Vorklimatisieren gestoppt",
+                message="Alle Preconditioning-Systeme ausgeschaltet.",
+                severity="info",
+            )
+
+        hass.services.async_register(
+            DOMAIN,
+            SERVICE_PRECONDITIONING_STOP,
+            _handle_preconditioning_stop,
+            schema=PRECONDITIONING_STOP_SCHEMA,
         )
 
     entry.async_on_unload(entry.add_update_listener(async_reload_entry))

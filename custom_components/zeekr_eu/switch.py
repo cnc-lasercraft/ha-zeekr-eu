@@ -65,7 +65,6 @@ async def async_setup_entry(
             for field, label, icon in (
                 ("aktiv", "Aktiv", "mdi:calendar-check"),
                 ("lenkrad", "Lenkradheizung", "mdi:steering"),
-                ("defrost", "Defrost", "mdi:car-defrost-front"),
             ):
                 entities.append(
                     ZeekrSlotBoolSwitch(coordinator, vin, slot_idx, field, label, icon)
@@ -81,19 +80,16 @@ async def async_setup_entry(
         for field, label, icon in (
             ("aktiv", "Aktiv", "mdi:calendar-clock"),
             ("lenkrad", "Lenkradheizung", "mdi:steering"),
-            ("defrost", "Defrost", "mdi:car-defrost-front"),
         ):
             entities.append(
                 ZeekrEinmaligBoolSwitch(coordinator, vin, field, label, icon)
             )
 
-        for field, label, icon in (
-            ("lenkrad", "Lenkradheizung", "mdi:steering"),
-            ("defrost", "Defrost", "mdi:car-defrost-front"),
-        ):
-            entities.append(
-                ZeekrSofortBoolSwitch(coordinator, vin, field, label, icon)
+        entities.append(
+            ZeekrSofortBoolSwitch(
+                coordinator, vin, "lenkrad", "Lenkradheizung", "mdi:steering"
             )
+        )
 
     async_add_entities(entities)
 
@@ -347,9 +343,11 @@ class ZeekrSwitch(CoordinatorEntity[ZeekrCoordinator], SwitchEntity):
                 )
                 if val is None:
                     return None
-                # "2" (AC charging?), "1" (DC charging?), "25" (stopped AC?), "26" (stopped DC?)
-                # Treat 1 or 2 as charging, 25 or 26 as stopped
-                return str(val) in ("1", "2")
+                # "2" (AC charging?), "1" (DC charging?), "3" (starting/handshake,
+                # observed between turn_on and the first charging tick),
+                # "25" (stopped AC?), "26" (stopped DC?).
+                # Treat 1/2/3 as charging, 25/26 as stopped.
+                return str(val) in ("1", "2", "3")
             else:
                 val = (
                     self.coordinator.data.get(self.vin, {})
@@ -470,8 +468,11 @@ class ZeekrSwitch(CoordinatorEntity[ZeekrCoordinator], SwitchEntity):
                             status.get("chargerState")
                             if isinstance(status, dict) else None
                         )
-                        # iOS trace: chargerState==2 is charging, 25 is stopped
-                        if charger_state is not None and str(charger_state) in ("1", "2"):
+                        # chargerState: 1/2 = actively charging, 3 = starting
+                        # (handshake between turn_on and first charge tick —
+                        # huawei_solar 2026-04-20: without this, switch rolled
+                        # back after ~7 s even though charging did start).
+                        if charger_state is not None and str(charger_state) in ("1", "2", "3"):
                             charging_confirmed = True
                             break
                     except Exception as e:

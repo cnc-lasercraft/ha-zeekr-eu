@@ -20,6 +20,7 @@ from .config_state import (
 from .const import DOMAIN
 from .coordinator import ZeekrCoordinator
 from .entity import ZeekrEntity
+from .vorbereitung import KLIMA_MODUS_AC, KLIMA_MODUS_OPTIONS, NUM_SLOTS
 
 OPTION_OFF = "Off"
 OPTION_LEVEL_1 = "Level 1"
@@ -128,6 +129,12 @@ async def async_setup_entry(
             )
         )
 
+        # Klimamodus selects (per-slot + einmalig + sofort).
+        for slot_idx in range(NUM_SLOTS):
+            entities.append(ZeekrSlotKlimaModusSelect(coordinator, vin, slot_idx))
+        entities.append(ZeekrEinmaligKlimaModusSelect(coordinator, vin))
+        entities.append(ZeekrSofortKlimaModusSelect(coordinator, vin))
+
         # User config selects (migrated from legacy HA input_select helpers)
         entities.append(ZeekrSettingsSelect(
             coordinator, vin,
@@ -191,6 +198,97 @@ class ZeekrSettingsSelect(ZeekrEntity, RestoreEntity, SelectEntity):
         last = await self.async_get_last_state()
         if last and last.state in self._attr_options:
             setattr(self.coordinator.get_config(self.vin), self._field, last.state)
+
+
+class _VorbereitungKlimaModusSelectBase(ZeekrEntity, RestoreEntity, SelectEntity):
+    """Select for klima_modus, backed by coordinator vorbereitung state."""
+
+    _attr_has_entity_name = True
+    _attr_entity_category = EntityCategory.CONFIG
+    _attr_icon = "mdi:air-conditioner"
+    _attr_options = KLIMA_MODUS_OPTIONS
+
+    def __init__(
+        self, coordinator: ZeekrCoordinator, vin: str, unique_suffix: str, name: str
+    ) -> None:
+        super().__init__(coordinator, vin)
+        self._attr_name = name
+        self._attr_unique_id = f"{vin}_{unique_suffix}"
+
+    def _read(self) -> str:
+        raise NotImplementedError
+
+    def _write(self, value: str) -> None:
+        raise NotImplementedError
+
+    @property
+    def current_option(self) -> str | None:
+        val = self._read()
+        return val if val in self._attr_options else KLIMA_MODUS_AC
+
+    async def async_select_option(self, option: str) -> None:
+        if option not in self._attr_options:
+            return
+        self._write(option)
+        self.async_write_ha_state()
+
+    async def async_added_to_hass(self) -> None:
+        await super().async_added_to_hass()
+        last = await self.async_get_last_state()
+        if last and last.state in self._attr_options:
+            self._write(last.state)
+
+
+class ZeekrSlotKlimaModusSelect(_VorbereitungKlimaModusSelectBase):
+    """Klimamodus select for a recurring slot."""
+
+    def __init__(self, coordinator: ZeekrCoordinator, vin: str, slot_idx: int) -> None:
+        super().__init__(
+            coordinator, vin,
+            unique_suffix=f"vorbereitung_slot{slot_idx + 1}_klima_modus",
+            name=f"Vorklimatisieren Slot {slot_idx + 1} Klimamodus",
+        )
+        self._slot_idx = slot_idx
+
+    def _read(self) -> str:
+        return self.coordinator.get_vorbereitung(self.vin).slots[self._slot_idx].klima_modus
+
+    def _write(self, value: str) -> None:
+        self.coordinator.get_vorbereitung(self.vin).slots[self._slot_idx].klima_modus = value
+
+
+class ZeekrEinmaligKlimaModusSelect(_VorbereitungKlimaModusSelectBase):
+    """Klimamodus select for the one-shot Vorbereitung."""
+
+    def __init__(self, coordinator: ZeekrCoordinator, vin: str) -> None:
+        super().__init__(
+            coordinator, vin,
+            unique_suffix="vorbereitung_einmalig_klima_modus",
+            name="Vorklimatisieren Einmalig Klimamodus",
+        )
+
+    def _read(self) -> str:
+        return self.coordinator.get_vorbereitung(self.vin).einmalig.klima_modus
+
+    def _write(self, value: str) -> None:
+        self.coordinator.get_vorbereitung(self.vin).einmalig.klima_modus = value
+
+
+class ZeekrSofortKlimaModusSelect(_VorbereitungKlimaModusSelectBase):
+    """Klimamodus select for the immediate (sofort) defaults."""
+
+    def __init__(self, coordinator: ZeekrCoordinator, vin: str) -> None:
+        super().__init__(
+            coordinator, vin,
+            unique_suffix="vorbereitung_sofort_klima_modus",
+            name="Vorklimatisieren Sofort Klimamodus",
+        )
+
+    def _read(self) -> str:
+        return self.coordinator.get_vorbereitung(self.vin).sofort.klima_modus
+
+    def _write(self, value: str) -> None:
+        self.coordinator.get_vorbereitung(self.vin).sofort.klima_modus = value
 
 
 class ZeekrSeatSelect(CoordinatorEntity, SelectEntity):

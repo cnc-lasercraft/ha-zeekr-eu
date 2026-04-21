@@ -90,7 +90,7 @@ async def async_setup_entry(
                     d.get("additionalVehicleStatus", {})
                     .get("electricVehicleStatus", {})
                     .get("chargerState", "0")
-                ) in [1, 2, 15],
+                ) in [1, 2, 3, 15],
                 BinarySensorDeviceClass.BATTERY_CHARGING,
             )
         )

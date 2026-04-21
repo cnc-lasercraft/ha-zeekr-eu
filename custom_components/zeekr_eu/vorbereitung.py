@@ -22,6 +22,21 @@ DEFAULT_AUSSENTEMP_SENSOR = "sensor.gw2000a_outdoor_temperature"
 # Weekday flag fields on SlotConfig, index 0=Mo..6=So
 WEEKDAY_FIELDS = ("mo", "di", "mi", "do", "fr", "sa", "so")
 
+# Klima-Modi — the Zeekr firmware enforces these as mutually exclusive:
+# activating one clears the others. "aus" sends all base keys as false.
+KLIMA_MODUS_AUS = "Aus"
+KLIMA_MODUS_AC = "AC"
+KLIMA_MODUS_DEFROST = "Defrost"
+KLIMA_MODUS_HEIZEN_MAX = "Heizen Max"
+KLIMA_MODUS_COOLING_MAX = "Cooling Max"
+KLIMA_MODUS_OPTIONS = [
+    KLIMA_MODUS_AUS,
+    KLIMA_MODUS_AC,
+    KLIMA_MODUS_DEFROST,
+    KLIMA_MODUS_HEIZEN_MAX,
+    KLIMA_MODUS_COOLING_MAX,
+]
+
 
 @dataclass
 class SlotConfig:
@@ -36,10 +51,10 @@ class SlotConfig:
     fr: bool = True
     sa: bool = False
     so: bool = False
+    klima_modus: str = KLIMA_MODUS_AC
     ac_temp: float = 21.0
     dauer: int = 15
     lenkrad: bool = False
-    defrost: bool = False
     sitz_fahrer: int = 0
     sitz_beifahrer: int = 0
     sitz_hl: int = 0
@@ -52,10 +67,10 @@ class EinmaligConfig:
 
     aktiv: bool = False
     zeit: datetime | None = None
+    klima_modus: str = KLIMA_MODUS_AC
     ac_temp: float = 21.0
     dauer: int = 15
     lenkrad: bool = False
-    defrost: bool = False
     sitz_fahrer: int = 0
     sitz_beifahrer: int = 0
     sitz_hl: int = 0
@@ -66,10 +81,10 @@ class EinmaligConfig:
 class SofortConfig:
     """Default settings for the immediate (sofort) script/button."""
 
+    klima_modus: str = KLIMA_MODUS_AC
     ac_temp: float = 21.0
     dauer: int = 15
     lenkrad: bool = False
-    defrost: bool = False
     sitz_fahrer: int = 0
     sitz_beifahrer: int = 0
     sitz_hl: int = 0
@@ -104,46 +119,32 @@ def slot_active_on(slot: SlotConfig, weekday: int) -> bool:
     return bool(getattr(slot, WEEKDAY_FIELDS[weekday], False))
 
 
+def _common_service_data(cfg: SlotConfig | EinmaligConfig | SofortConfig) -> dict[str, Any]:
+    return {
+        "klima_modus": str(cfg.klima_modus),
+        "ac_temp": float(cfg.ac_temp),
+        "duration_min": int(cfg.dauer),
+        "steering_wheel": bool(cfg.lenkrad),
+        "seat_driver": int(cfg.sitz_fahrer),
+        "seat_passenger": int(cfg.sitz_beifahrer),
+        "seat_rear_left": int(cfg.sitz_hl),
+        "seat_rear_right": int(cfg.sitz_hr),
+    }
+
+
 def slot_to_service_data(slot: SlotConfig) -> dict[str, Any]:
     """Convert a SlotConfig to preconditioning_start service params."""
-    return {
-        "ac_temp": float(slot.ac_temp),
-        "duration_min": int(slot.dauer),
-        "defrost": bool(slot.defrost),
-        "steering_wheel": bool(slot.lenkrad),
-        "seat_driver": int(slot.sitz_fahrer),
-        "seat_passenger": int(slot.sitz_beifahrer),
-        "seat_rear_left": int(slot.sitz_hl),
-        "seat_rear_right": int(slot.sitz_hr),
-    }
+    return _common_service_data(slot)
 
 
 def einmalig_to_service_data(e: EinmaligConfig) -> dict[str, Any]:
     """Convert an EinmaligConfig to preconditioning_start service params."""
-    return {
-        "ac_temp": float(e.ac_temp),
-        "duration_min": int(e.dauer),
-        "defrost": bool(e.defrost),
-        "steering_wheel": bool(e.lenkrad),
-        "seat_driver": int(e.sitz_fahrer),
-        "seat_passenger": int(e.sitz_beifahrer),
-        "seat_rear_left": int(e.sitz_hl),
-        "seat_rear_right": int(e.sitz_hr),
-    }
+    return _common_service_data(e)
 
 
 def sofort_to_service_data(s: SofortConfig) -> dict[str, Any]:
     """Convert a SofortConfig to preconditioning_start service params."""
-    return {
-        "ac_temp": float(s.ac_temp),
-        "duration_min": int(s.dauer),
-        "defrost": bool(s.defrost),
-        "steering_wheel": bool(s.lenkrad),
-        "seat_driver": int(s.sitz_fahrer),
-        "seat_passenger": int(s.sitz_beifahrer),
-        "seat_rear_left": int(s.sitz_hl),
-        "seat_rear_right": int(s.sitz_hr),
-    }
+    return _common_service_data(s)
 
 
 def apply_weather_override(
@@ -151,15 +152,22 @@ def apply_weather_override(
     aussentemp: float | None,
     globals_cfg: GlobalConfig,
 ) -> dict[str, Any]:
-    """Mutate settings to enable defrost + extra duration if it's cold outside."""
+    """Switch to Defrost mode + extend duration when it's cold outside.
+
+    Only overrides AC or Aus — explicit Heizen Max / Cooling Max choices
+    from the user are left untouched.
+    """
     if aussentemp is None:
         return settings
     if aussentemp >= globals_cfg.wetter_schwelle_kalt:
         return settings
-    settings["defrost"] = True
+    modus = settings.get("klima_modus", KLIMA_MODUS_AC)
+    if modus not in (KLIMA_MODUS_AUS, KLIMA_MODUS_AC):
+        return settings
+    settings["klima_modus"] = KLIMA_MODUS_DEFROST
     settings["duration_min"] = int(settings.get("duration_min", 15)) + globals_cfg.wetter_extra_min
     _LOGGER.info(
-        "Cold-weather override: aussen=%.1f°C < %.1f°C → defrost ON, duration +%d min",
+        "Cold-weather override: aussen=%.1f°C < %.1f°C → Defrost mode, duration +%d min",
         aussentemp, globals_cfg.wetter_schwelle_kalt, globals_cfg.wetter_extra_min,
     )
     return settings
