@@ -753,8 +753,22 @@ class ZeekrVehicleCard extends HTMLElement {
     var sentryOn = isOn(h, this._sentryEntity);
     var steeringHeatOn = isOn(h, this._steeringHeatEntity);
 
-    // Preheat active = climate on + steering heat + any seat heat
-    var preheatActive = climateOn && steeringHeatOn;
+    var seatHeatAny = false;
+    if (this._seatHeatEntities) {
+      for (var _sk in this._seatHeatEntities) {
+        var _se = this._seatHeatEntities[_sk];
+        if (_se) {
+          var _s = stateVal(h, _se);
+          if (_s && _s !== "Off" && _s !== "off" && _s !== "unavailable" && _s !== "unknown") {
+            seatHeatAny = true;
+            break;
+          }
+        }
+      }
+    }
+
+    // Vorklima active = any preconditioning subsystem actually running
+    var preheatActive = climateOn || defrosterOn || steeringHeatOn || seatHeatAny;
 
     // Battery bar color
     var battColor = "#4caf50";
@@ -859,7 +873,7 @@ class ZeekrVehicleCard extends HTMLElement {
       + '<div class="actions">'
       + '<button class="action-btn preheat-btn' + (preheatActive ? ' active' : '') + '" id="btn-preheat">'
       + '<ha-icon icon="mdi:car-seat-heater" style="--mdc-icon-size: 22px;"></ha-icon>'
-      + '<span class="btn-label">Vorheizen ' + (preheatActive ? 'Ein' : 'Aus') + '</span>'
+      + '<span class="btn-label">Vorklima ' + (preheatActive ? 'Ein' : 'Aus') + '</span>'
       + '</button>'
       + '<button class="action-btn' + (locked ? ' active' : '') + '" id="btn-lock">'
       + '<ha-icon icon="' + lockIcon + '" style="--mdc-icon-size: 22px;"></ha-icon>'

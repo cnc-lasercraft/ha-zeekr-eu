@@ -33,6 +33,7 @@ async def async_setup_entry(
         entities.append(ZeekrFlashBlinkersButton(coordinator, vehicle.vin))
         entities.append(ZeekrDumpApiButton(coordinator, vehicle.vin))
         entities.append(ZeekrVorbereitungSofortButton(coordinator, vehicle.vin))
+        entities.append(ZeekrVorbereitungStopButton(coordinator, vehicle.vin))
 
     async_add_entities(entities)
 
@@ -67,6 +68,27 @@ class ZeekrVorbereitungSofortButton(ZeekrEntity, ButtonEntity):
             "zeekr_eu",
             "preconditioning_start",
             {"vin": self.vin, **settings},
+            blocking=False,
+        )
+
+
+class ZeekrVorbereitungStopButton(ZeekrEntity, ButtonEntity):
+    """Stop every active preconditioning subsystem (AC/DF/SW/SH/RC/RW)."""
+
+    _attr_has_entity_name = True
+    _attr_icon = "mdi:stop-circle"
+
+    def __init__(self, coordinator: ZeekrCoordinator, vin: str) -> None:
+        super().__init__(coordinator, vin)
+        self._attr_name = "Vorklimatisieren Stop"
+        self._attr_unique_id = f"{vin}_vorbereitung_stop"
+
+    async def async_press(self) -> None:
+        _LOGGER.info("Vorbereitung Stop button pressed for %s", self.vin)
+        await self.hass.services.async_call(
+            "zeekr_eu",
+            "preconditioning_stop",
+            {"vin": self.vin},
             blocking=False,
         )
 
