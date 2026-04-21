@@ -39,7 +39,7 @@ class ZeekrEinmaligZeitDateTime(ZeekrEntity, RestoreEntity, DateTimeEntity):
 
     def __init__(self, coordinator: ZeekrCoordinator, vin: str) -> None:
         super().__init__(coordinator, vin)
-        self._attr_name = "Vorbereitung Einmalig Zeit"
+        self._attr_name = "Vorklimatisieren Einmalig Zeit"
         self._attr_unique_id = f"{vin}_vorbereitung_einmalig_zeit"
 
     @property

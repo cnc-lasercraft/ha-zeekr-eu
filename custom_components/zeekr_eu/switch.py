@@ -190,7 +190,7 @@ class ZeekrSlotBoolSwitch(_VorbereitungBoolSwitchBase):
             coordinator,
             vin,
             unique_suffix=f"vorbereitung_slot{slot_idx + 1}_{field}",
-            name=f"Vorbereitung Slot {slot_idx + 1} {label}",
+            name=f"Vorklimatisieren Slot {slot_idx + 1} {label}",
             icon=icon,
         )
         self._slot_idx = slot_idx
@@ -220,7 +220,7 @@ class ZeekrEinmaligBoolSwitch(_VorbereitungBoolSwitchBase):
             coordinator,
             vin,
             unique_suffix=f"vorbereitung_einmalig_{field}",
-            name=f"Vorbereitung Einmalig {label}",
+            name=f"Vorklimatisieren Einmalig {label}",
             icon=icon,
         )
         self._field = field
@@ -247,7 +247,7 @@ class ZeekrSofortBoolSwitch(_VorbereitungBoolSwitchBase):
             coordinator,
             vin,
             unique_suffix=f"vorbereitung_sofort_{field}",
-            name=f"Vorbereitung Sofort {label}",
+            name=f"Vorklimatisieren Sofort {label}",
             icon=icon,
         )
         self._field = field

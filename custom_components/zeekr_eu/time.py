@@ -42,7 +42,7 @@ class ZeekrSlotZeitTime(ZeekrEntity, RestoreEntity, TimeEntity):
     def __init__(self, coordinator: ZeekrCoordinator, vin: str, slot_idx: int) -> None:
         super().__init__(coordinator, vin)
         self._slot_idx = slot_idx
-        self._attr_name = f"Vorbereitung Slot {slot_idx + 1} Zeit"
+        self._attr_name = f"Vorklimatisieren Slot {slot_idx + 1} Zeit"
         self._attr_unique_id = f"{vin}_vorbereitung_slot{slot_idx + 1}_zeit"
 
     @property

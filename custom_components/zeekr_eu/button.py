@@ -45,7 +45,7 @@ class ZeekrVorbereitungSofortButton(ZeekrEntity, ButtonEntity):
 
     def __init__(self, coordinator: ZeekrCoordinator, vin: str) -> None:
         super().__init__(coordinator, vin)
-        self._attr_name = "Vorbereitung Jetzt"
+        self._attr_name = "Vorklimatisieren Jetzt"
         self._attr_unique_id = f"{vin}_vorbereitung_sofort"
 
     async def async_press(self) -> None:

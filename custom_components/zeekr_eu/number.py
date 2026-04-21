@@ -173,15 +173,15 @@ def _make_sofort_numbers(coordinator: ZeekrCoordinator, vin: str):
 def _make_global_numbers(coordinator: ZeekrCoordinator, vin: str):
     return [
         ZeekrGlobalNumber(
-            coordinator, vin, "vorlaufzeit", "Vorbereitung Vorlaufzeit",
+            coordinator, vin, "vorlaufzeit", "Vorklimatisieren Vorlaufzeit",
             5, 60, 5, UnitOfTime.MINUTES, "mdi:clock-start",
         ),
         ZeekrGlobalNumber(
-            coordinator, vin, "wetter_schwelle_kalt", "Vorbereitung Wetter Kälte-Schwelle",
+            coordinator, vin, "wetter_schwelle_kalt", "Vorklimatisieren Wetter Kälte-Schwelle",
             -20, 20, 1, UnitOfTemperature.CELSIUS, "mdi:snowflake",
         ),
         ZeekrGlobalNumber(
-            coordinator, vin, "wetter_extra_min", "Vorbereitung Wetter Extra-Minuten",
+            coordinator, vin, "wetter_extra_min", "Vorklimatisieren Wetter Extra-Minuten",
             0, 30, 1, UnitOfTime.MINUTES, "mdi:timer-plus",
         ),
     ]
@@ -449,7 +449,7 @@ class ZeekrSlotNumber(_VorbereitungNumberBase):
         super().__init__(
             coordinator, vin,
             unique_suffix=f"vorbereitung_slot{slot_idx + 1}_{field}",
-            name=f"Vorbereitung Slot {slot_idx + 1} {label}",
+            name=f"Vorklimatisieren Slot {slot_idx + 1} {label}",
             min_v=min_v, max_v=max_v, step=step, unit=unit, icon=icon,
         )
         self._slot_idx = slot_idx
@@ -488,7 +488,7 @@ class ZeekrEinmaligNumber(_VorbereitungNumberBase):
         super().__init__(
             coordinator, vin,
             unique_suffix=f"vorbereitung_einmalig_{field}",
-            name=f"Vorbereitung Einmalig {label}",
+            name=f"Vorklimatisieren Einmalig {label}",
             min_v=min_v, max_v=max_v, step=step, unit=unit, icon=icon,
         )
         self._field = field
@@ -522,7 +522,7 @@ class ZeekrSofortNumber(_VorbereitungNumberBase):
         super().__init__(
             coordinator, vin,
             unique_suffix=f"vorbereitung_sofort_{field}",
-            name=f"Vorbereitung Sofort {label}",
+            name=f"Vorklimatisieren Sofort {label}",
             min_v=min_v, max_v=max_v, step=step, unit=unit, icon=icon,
         )
         self._field = field
