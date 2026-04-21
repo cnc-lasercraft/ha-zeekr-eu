@@ -19,11 +19,8 @@ _LOGGER = logging.getLogger(__name__)
 NUM_SLOTS = 3
 DEFAULT_AUSSENTEMP_SENSOR = "sensor.gw2000a_outdoor_temperature"
 
-WEEKDAY_OPTIONS = [
-    "täglich", "Mo-Fr", "Sa-So",
-    "Mo", "Di", "Mi", "Do", "Fr", "Sa", "So",
-]
-_WEEKDAY_NAMES = ["Mo", "Di", "Mi", "Do", "Fr", "Sa", "So"]
+# Weekday flag fields on SlotConfig, index 0=Mo..6=So
+WEEKDAY_FIELDS = ("mo", "di", "mi", "do", "fr", "sa", "so")
 
 
 @dataclass
@@ -32,7 +29,13 @@ class SlotConfig:
 
     aktiv: bool = False
     zeit: dtime = field(default_factory=lambda: dtime(8, 0))
-    tage: str = "Mo-Fr"
+    mo: bool = True
+    di: bool = True
+    mi: bool = True
+    do: bool = True
+    fr: bool = True
+    sa: bool = False
+    so: bool = False
     ac_temp: float = 21.0
     dauer: int = 15
     lenkrad: bool = False
@@ -94,17 +97,11 @@ class VorbereitungState:
     globals: GlobalConfig = field(default_factory=GlobalConfig)
 
 
-def weekday_matches(pattern: str, weekday: int) -> bool:
-    """Return True if the day pattern matches the given weekday (0=Mon..6=Sun)."""
-    if pattern == "täglich":
-        return True
-    if pattern == "Mo-Fr":
-        return weekday < 5
-    if pattern == "Sa-So":
-        return weekday >= 5
-    if pattern in _WEEKDAY_NAMES:
-        return _WEEKDAY_NAMES[weekday] == pattern
-    return False
+def slot_active_on(slot: SlotConfig, weekday: int) -> bool:
+    """Return True if the slot has its weekday flag enabled (0=Mon..6=Sun)."""
+    if not 0 <= weekday < len(WEEKDAY_FIELDS):
+        return False
+    return bool(getattr(slot, WEEKDAY_FIELDS[weekday], False))
 
 
 def slot_to_service_data(slot: SlotConfig) -> dict[str, Any]:
@@ -221,7 +218,7 @@ class VorbereitungScheduler:
         for idx, slot in enumerate(state.slots):
             if not slot.aktiv:
                 continue
-            if not weekday_matches(slot.tage, now_local.weekday()):
+            if not slot_active_on(slot, now_local.weekday()):
                 continue
             if (slot.zeit.hour, slot.zeit.minute) != target_hm:
                 continue

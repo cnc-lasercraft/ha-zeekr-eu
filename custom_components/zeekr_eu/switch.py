@@ -18,7 +18,7 @@ from .const import DOMAIN
 from .coordinator import ZeekrCoordinator
 from .entity import ZeekrEntity
 from .herold import async_notify as herold_notify
-from .vorbereitung import NUM_SLOTS
+from .vorbereitung import NUM_SLOTS, WEEKDAY_FIELDS
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -60,6 +60,7 @@ async def async_setup_entry(
         entities.append(ZeekrDeadlineAktivSwitch(coordinator, vin))
 
         # Vorbereitung config switches (per-slot, einmalig, sofort)
+        weekday_labels = ("Mo", "Di", "Mi", "Do", "Fr", "Sa", "So")
         for slot_idx in range(NUM_SLOTS):
             for field, label, icon in (
                 ("aktiv", "Aktiv", "mdi:calendar-check"),
@@ -68,6 +69,13 @@ async def async_setup_entry(
             ):
                 entities.append(
                     ZeekrSlotBoolSwitch(coordinator, vin, slot_idx, field, label, icon)
+                )
+            for day_field, day_label in zip(WEEKDAY_FIELDS, weekday_labels):
+                entities.append(
+                    ZeekrSlotBoolSwitch(
+                        coordinator, vin, slot_idx,
+                        day_field, day_label, "mdi:calendar-week",
+                    )
                 )
 
         for field, label, icon in (
