@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from typing import Any
 
 from homeassistant.components.select import SelectEntity
@@ -20,7 +21,10 @@ from .config_state import (
 from .const import DOMAIN
 from .coordinator import ZeekrCoordinator
 from .entity import ZeekrEntity
+from .herold import async_notify as herold_notify
 from .vorbereitung import KLIMA_MODUS_AC, KLIMA_MODUS_OPTIONS, NUM_SLOTS
+
+_LOGGER = logging.getLogger(__name__)
 
 OPTION_OFF = "Off"
 OPTION_LEVEL_1 = "Level 1"
@@ -396,9 +400,23 @@ class ZeekrSeatSelect(CoordinatorEntity, SelectEntity):
         setting["serviceParameters"] = params
 
         await self.coordinator.async_inc_invoke()
-        await self.hass.async_add_executor_job(
+        success = await self.hass.async_add_executor_job(
             vehicle.do_remote_control, command, service_id, setting
         )
+
+        if not success:
+            _LOGGER.warning(
+                "Seat %s command (level=%d) failed for %s",
+                self.service_code, level, self.vin,
+            )
+            await herold_notify(
+                self.hass,
+                topic="zeekr/remote/fehlgeschlagen",
+                titel=f"Zeekr {self.vin[-4:] if self.vin else ''}: Sitz {self.service_code}",
+                message=f"Sitz-Kommando {self.service_code} (Stufe {level}) wurde nicht bestätigt.",
+                severity="warnung",
+            )
+            return
 
         # Optimistic update
         self._update_local_state_optimistically(level)

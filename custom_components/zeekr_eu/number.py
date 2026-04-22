@@ -16,6 +16,7 @@ from homeassistant.helpers.update_coordinator import CoordinatorEntity
 from .const import DOMAIN
 from .coordinator import ZeekrCoordinator
 from .entity import ZeekrEntity
+from .herold import async_notify as herold_notify
 from .vorbereitung import NUM_SLOTS
 
 _LOGGER = logging.getLogger(__name__)
@@ -371,9 +372,19 @@ class ZeekrChargingLimitNumber(ZeekrEntity, RestoreNumber):
         }
 
         await self.coordinator.async_inc_invoke()
-        await self.hass.async_add_executor_job(
+        success = await self.hass.async_add_executor_job(
             vehicle.do_remote_control, command, service_id, setting
         )
+        if not success:
+            _LOGGER.warning("Charging limit set command failed for %s", self.vin)
+            await herold_notify(
+                self.hass,
+                topic="zeekr/remote/fehlgeschlagen",
+                titel=f"Zeekr {self.vin[-4:] if self.vin else ''}: Ladelimit",
+                message="Ladelimit-Kommando wurde nicht bestätigt.",
+                severity="warnung",
+            )
+            return
         self._attr_native_value = value
         self.async_write_ha_state()
 

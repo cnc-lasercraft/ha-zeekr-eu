@@ -15,6 +15,7 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from .const import DOMAIN
 from .coordinator import ZeekrCoordinator
 from .entity import ZeekrEntity
+from .herold import async_notify as herold_notify
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -122,9 +123,19 @@ class ZeekrFlashBlinkersButton(ZeekrEntity, ButtonEntity):
         }
 
         await self.coordinator.async_inc_invoke()
-        await self.hass.async_add_executor_job(
+        success = await self.hass.async_add_executor_job(
             vehicle.do_remote_control, command, service_id, setting
         )
+        if not success:
+            _LOGGER.warning("Flash blinkers command failed for %s", self.vin)
+            await herold_notify(
+                self.hass,
+                topic="zeekr/remote/fehlgeschlagen",
+                titel=f"Zeekr {self.vin[-4:] if self.vin else ''}: Blinker",
+                message="Flash-Blinkers-Kommando wurde nicht bestätigt.",
+                severity="warnung",
+            )
+            return
         _LOGGER.info("Flash blinkers requested for vehicle %s", self.vin)
 
 
