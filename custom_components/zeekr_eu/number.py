@@ -278,30 +278,27 @@ class ZeekrChargingNeededThreshold(ZeekrEntity, RestoreNumber):
         super().__init__(coordinator, vin)
         self._attr_name = "Charging Needed Threshold"
         self._attr_unique_id = f"{vin}_charging_needed_threshold"
-        self._attr_native_value = 30.0
-        # Expose value on coordinator so binary_sensor can read it
-        coordinator.charging_needed_threshold = setdefault_threshold(coordinator, 30.0)
+        self._attr_native_value = float(
+            coordinator.get_config(vin).charging_needed_threshold
+        )
 
     async def async_added_to_hass(self) -> None:
         """Handle entity which will be added."""
         await super().async_added_to_hass()
         last_state = await self.async_get_last_number_data()
         if last_state and last_state.native_value is not None:
-            self._attr_native_value = last_state.native_value
-            self.coordinator.charging_needed_threshold = float(last_state.native_value)
+            self._attr_native_value = float(last_state.native_value)
+            self.coordinator.get_config(self.vin).charging_needed_threshold = (
+                float(last_state.native_value)
+            )
 
     async def async_set_native_value(self, value: float) -> None:
         """Set new threshold."""
         self._attr_native_value = value
-        self.coordinator.charging_needed_threshold = float(value)
+        self.coordinator.get_config(self.vin).charging_needed_threshold = float(value)
         self.async_write_ha_state()
         # Trigger refresh so binary_sensor recomputes
         self.coordinator.async_update_listeners()
-
-
-def setdefault_threshold(coordinator: ZeekrCoordinator, default: float) -> float:
-    """Return existing threshold on coordinator or set default."""
-    return getattr(coordinator, "charging_needed_threshold", default)
 
 
 class ZeekrChargingLimitNumber(ZeekrEntity, RestoreNumber):

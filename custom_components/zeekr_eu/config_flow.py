@@ -57,6 +57,9 @@ class ZeekrEUFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):  # type: ign
                 user_input[CONF_VIN_IV],
             )
             if valid:
+                # Guard against duplicate entries for the same Zeekr account.
+                await self.async_set_unique_id(user_input[CONF_USERNAME].lower())
+                self._abort_if_unique_id_configured()
                 # Store the client for async_setup_entry to reuse
                 self.hass.data.setdefault(DOMAIN, {})["_temp_client"] = (
                     self._temp_client

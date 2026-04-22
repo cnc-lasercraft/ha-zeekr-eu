@@ -287,8 +287,8 @@ class ZeekrChargingNeededBinarySensor(CoordinatorEntity, BinarySensorEntity):
             return None
 
     def _threshold(self) -> float:
-        """Return current threshold (default 30)."""
-        return float(getattr(self.coordinator, "charging_needed_threshold", 30.0))
+        """Return current threshold from per-VIN ZeekrConfigState."""
+        return float(self.coordinator.get_config(self.vin).charging_needed_threshold)
 
     @property
     def is_on(self) -> bool | None:

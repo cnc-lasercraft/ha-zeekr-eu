@@ -636,13 +636,14 @@ class ZeekrAPIStatusSensor(CoordinatorEntity, SensorEntity):
 
     @property
     def extra_state_attributes(self):
-        """Return the state attributes including tokens only."""
+        """Return connection diagnostics. Tokens are masked — never expose
+        raw JWTs as entity attributes (they end up in the frontend, history
+        and logbook)."""
         attrs = {}
         client = self.coordinator.client
         if client:
-            attrs["auth_token"] = client.auth_token
-            attrs["bearer_token"] = client.bearer_token
-            attrs["access_token"] = client.bearer_token
+            attrs["auth_token_present"] = bool(client.auth_token)
+            attrs["bearer_token_present"] = bool(client.bearer_token)
             attrs["logged_in"] = client.logged_in
             attrs["username"] = getattr(client, "username", None)
             attrs["region_code"] = getattr(client, "region_code", None)

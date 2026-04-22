@@ -37,6 +37,9 @@ class ZeekrConfigState:
     # weiterladen bis hierhin (schont NMC-Akku vs. 100%).
     pv_ceiling_soc: float = 90.0
 
+    # Unterhalb dieses SoC schaltet binary_sensor.*_charging_needed auf on.
+    charging_needed_threshold: float = 30.0
+
     # Auto-Notladung (Default-Deadline fallback)
     auto_notladung_trigger_soc: float = 15.0
     auto_notladung_ziel_soc: float = 40.0
