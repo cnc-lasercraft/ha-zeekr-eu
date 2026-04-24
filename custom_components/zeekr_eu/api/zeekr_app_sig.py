@@ -203,9 +203,18 @@ def calculate_sig(request: PreparedRequest, secret: str) -> str:
 
     signature_base_string = "".join(sig_base_list)
 
-    log.debug("--- DEBUG: SIGNATURE BASE STRING ---")
-    log.debug(signature_base_string)
-    log.debug("-----------------------------------")
+    if log.isEnabledFor(logging.DEBUG):
+        # Mask the bearer token so pasted debug logs don't leak it.
+        import re as _re
+        masked_debug = _re.sub(
+            r"(authorization:)([^\n]+)",
+            lambda m: m.group(1) + m.group(2)[:15] + "…(masked)",
+            signature_base_string,
+            flags=_re.IGNORECASE,
+        )
+        log.debug("--- DEBUG: SIGNATURE BASE STRING ---")
+        log.debug(masked_debug)
+        log.debug("-----------------------------------")
 
     # 6. Calculate HMAC-SHA256
     h = hmac.new(
@@ -244,6 +253,14 @@ def sign_request(request: PreparedRequest, secret: str) -> PreparedRequest:
     signature = calculate_sig(request, secret)
     request.headers["X-SIGNATURE"] = signature
 
-    log.debug(f"Request Headers: {request.headers}")
+    # Mask sensitive values inline — keep structure visible but drop the
+    # bearer JWT, encrypted VIN, device id and the computed signatures.
+    _sensitive = {"authorization", "x-vin", "x-device-id", "x-signature",
+                  "x-api-signature-nonce"}
+    _masked = {
+        k: (v[:8] + "…(masked)" if k.lower() in _sensitive and isinstance(v, str) and v else v)
+        for k, v in request.headers.items()
+    }
+    log.debug("Request Headers: %s", _masked)
 
     return request

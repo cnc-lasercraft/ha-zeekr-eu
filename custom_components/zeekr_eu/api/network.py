@@ -14,6 +14,31 @@ if TYPE_CHECKING:
 
 log = logging.getLogger(__name__)
 
+# Header names whose values should never land in debug logs raw — these can
+# leak the bearer JWT and the encrypted VIN when a user shares a log with us.
+_SENSITIVE_HEADERS = {
+    "authorization",
+    "x-vin",
+    "x-device-id",
+    "x-signature",
+    "x-api-signature-nonce",
+}
+
+
+def _mask_headers(headers) -> dict:
+    """Return a dict with sensitive header values truncated for logging."""
+    try:
+        items = headers.items()
+    except AttributeError:
+        return dict(headers) if headers else {}
+    masked: dict = {}
+    for k, v in items:
+        if k.lower() in _SENSITIVE_HEADERS and isinstance(v, str) and v:
+            masked[k] = v[:8] + "…(masked)"
+        else:
+            masked[k] = v
+    return masked
+
 
 def _safe_json(resp, logger) -> Any:
     """Safely parse JSON response, logging errors."""
@@ -51,7 +76,7 @@ def customPost(client: "ZeekrClient", url: str, body: dict | None = None) -> Any
     prepped = client.session.prepare_request(req)
     resp = client.session.send(prepped, timeout=REQUEST_TIMEOUT)
     logger.debug("------ HEADERS ------")
-    logger.debug(resp.headers)
+    logger.debug(_mask_headers(resp.headers))
     logger.debug("------ RESPONSE ------")
     logger.debug(resp.text)
 
@@ -69,7 +94,7 @@ def customGet(client: "ZeekrClient", url: str) -> Any:
     prepped = client.session.prepare_request(req)
     resp = client.session.send(prepped, timeout=REQUEST_TIMEOUT)
     logger.debug("------ HEADERS ------")
-    logger.debug(resp.headers)
+    logger.debug(_mask_headers(resp.headers))
     logger.debug("------ RESPONSE ------")
     logger.debug(resp.text)
 
@@ -98,14 +123,12 @@ def appSignedPost(
     logger.debug("--- Signed Request Details ---")
     logger.debug(f"Method: {final.method}")
     logger.debug(f"URL: {final.url}")
-    logger.debug("Headers:")
-    for k, v in final.headers.items():
-        logger.debug(f"  {k}: {v}")
+    logger.debug("Headers: %s", _mask_headers(final.headers))
     logger.debug(f"Body: {final.body or ''}")
 
     resp = client.session.send(final, timeout=REQUEST_TIMEOUT)
     logger.debug("------ HEADERS ------")
-    logger.debug(resp.headers)
+    logger.debug(_mask_headers(resp.headers))
     logger.debug("------ RESPONSE ------")
     logger.debug(resp.text)
 
@@ -145,7 +168,7 @@ def appSignedGet(
     final = zeekr_app_sig.sign_request(prepped, client.prod_secret)
     resp = client.session.send(final, timeout=REQUEST_TIMEOUT)
     logger.debug("------ HEADERS ------")
-    logger.debug(resp.headers)
+    logger.debug(_mask_headers(resp.headers))
     logger.debug("------ RESPONSE ------")
     logger.debug(resp.text)
 
