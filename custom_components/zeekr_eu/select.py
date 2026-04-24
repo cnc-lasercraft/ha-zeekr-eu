@@ -22,6 +22,7 @@ from .const import DOMAIN
 from .coordinator import ZeekrCoordinator
 from .entity import ZeekrEntity
 from .herold import async_notify as herold_notify
+from .protocol import SERVICE_ZAF
 from .vorbereitung import KLIMA_MODUS_AC, KLIMA_MODUS_OPTIONS, NUM_SLOTS
 
 _LOGGER = logging.getLogger(__name__)
@@ -380,7 +381,7 @@ class ZeekrSeatSelect(CoordinatorEntity, SelectEntity):
         duration = getattr(self.coordinator, "seat_duration", 15)
 
         command = "start"
-        service_id = "ZAF"
+        service_id = SERVICE_ZAF
 
         # Build setting payload
         setting: dict[str, Any] = {"serviceParameters": []}

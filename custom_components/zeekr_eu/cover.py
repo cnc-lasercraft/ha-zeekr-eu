@@ -18,6 +18,7 @@ from homeassistant.helpers.update_coordinator import CoordinatorEntity
 from .const import DOMAIN
 from .coordinator import ZeekrCoordinator
 from .herold import async_notify as herold_notify
+from .protocol import SERVICE_RWS
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -97,7 +98,7 @@ class ZeekrSunshade(CoordinatorEntity, CoverEntity):
             return
 
         command = "start"
-        service_id = "RWS"
+        service_id = SERVICE_RWS
         setting = {
             "serviceParameters": [
                 {
@@ -132,7 +133,7 @@ class ZeekrSunshade(CoordinatorEntity, CoverEntity):
             return
 
         command = "stop"
-        service_id = "RWS"
+        service_id = SERVICE_RWS
         setting = {
             "serviceParameters": [
                 {
@@ -251,7 +252,7 @@ class ZeekrWindows(CoordinatorEntity, CoverEntity):
             return
 
         command = "start"
-        service_id = "RWS"
+        service_id = SERVICE_RWS
         setting = {
             "serviceParameters": [
                 {
@@ -286,7 +287,7 @@ class ZeekrWindows(CoordinatorEntity, CoverEntity):
             return
 
         command = "stop"
-        service_id = "RWS"
+        service_id = SERVICE_RWS
         setting = {
             "serviceParameters": [
                 {

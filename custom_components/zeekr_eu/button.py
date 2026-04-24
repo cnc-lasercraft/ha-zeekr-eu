@@ -16,6 +16,7 @@ from .const import DOMAIN
 from .coordinator import ZeekrCoordinator
 from .entity import ZeekrEntity
 from .herold import async_notify as herold_notify
+from .protocol import KEY_RHL, SERVICE_RHL
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -112,13 +113,10 @@ class ZeekrFlashBlinkersButton(ZeekrEntity, ButtonEntity):
             return
 
         command = "start"
-        service_id = "RHL"
+        service_id = SERVICE_RHL
         setting = {
             "serviceParameters": [
-                {
-                    "key": "rhl",
-                    "value": "light-flash"
-                }
+                {"key": KEY_RHL, "value": "light-flash"}
             ]
         }
 

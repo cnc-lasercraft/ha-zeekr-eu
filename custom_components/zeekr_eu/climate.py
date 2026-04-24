@@ -20,6 +20,7 @@ from homeassistant.helpers.update_coordinator import CoordinatorEntity
 from .const import DOMAIN
 from .coordinator import ZeekrCoordinator
 from .herold import async_notify as herold_notify
+from .protocol import KEY_AC, SERVICE_ZAF, VALUE_FALSE, VALUE_TRUE
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -98,7 +99,7 @@ class ZeekrClimate(CoordinatorEntity, ClimateEntity):
             return
 
         command = "start"
-        service_id = "ZAF"
+        service_id = SERVICE_ZAF
         setting = None
 
         if hvac_mode == HVACMode.HEAT_COOL:
@@ -106,28 +107,16 @@ class ZeekrClimate(CoordinatorEntity, ClimateEntity):
             duration = getattr(self.coordinator, "ac_duration", 15)
             setting = {
                 "serviceParameters": [
-                    {
-                        "key": "AC",
-                        "value": "true"
-                    },
-                    {
-                        "key": "AC.temp",
-                        "value": str(self._target_temperature)
-                    },
-                    {
-                        "key": "AC.duration",
-                        "value": str(duration)
-                    }
+                    {"key": KEY_AC, "value": VALUE_TRUE},
+                    {"key": f"{KEY_AC}.temp", "value": str(self._target_temperature)},
+                    {"key": f"{KEY_AC}.duration", "value": str(duration)},
                 ]
             }
         elif hvac_mode == HVACMode.OFF:
             # Turn OFF
             setting = {
                 "serviceParameters": [
-                    {
-                        "key": "AC",
-                        "value": "false"
-                    }
+                    {"key": KEY_AC, "value": VALUE_FALSE}
                 ]
             }
 

@@ -27,6 +27,19 @@ from .const import (
 )
 from .coordinator import ZeekrCoordinator
 from .herold import async_notify as herold_notify, async_register_topics
+from .protocol import (
+    KEY_AC,
+    KEY_DF,
+    KEY_OPERATION,
+    KEY_RC,
+    KEY_RW,
+    KEY_SW,
+    OP_ENV_REGULATION_START,
+    SEAT_SERVICE_CODES,
+    SERVICE_ZAF,
+    VALUE_FALSE,
+    VALUE_TRUE,
+)
 from .request_stats import ZeekrRequestStats
 from .vorbereitung import (
     KLIMA_MODUS_AC,
@@ -67,14 +80,6 @@ PRECONDITIONING_SCHEMA = vol.Schema(
         ),
     }
 )
-
-# Seat heat service code by position (matches select.py)
-SEAT_SERVICE_CODES = {
-    "seat_driver": "SH.11",
-    "seat_passenger": "SH.19",
-    "seat_rear_left": "SH.21",
-    "seat_rear_right": "SH.29",
-}
 
 _LOGGER: logging.Logger = logging.getLogger(__package__)
 
@@ -190,35 +195,38 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry):
             modus = call.data["klima_modus"]
             ac_temp = call.data["ac_temp"]
 
+            def _bool(v: bool) -> str:
+                return VALUE_TRUE if v else VALUE_FALSE
+
             params: list[dict[str, str]] = []
 
             # AC
             ac_active = modus == KLIMA_MODUS_AC
-            params.append({"key": "AC", "value": "true" if ac_active else "false"})
+            params.append({"key": KEY_AC, "value": _bool(ac_active)})
             if ac_active:
-                params.append({"key": "AC.temp", "value": str(ac_temp)})
-                params.append({"key": "AC.duration", "value": str(duration)})
+                params.append({"key": f"{KEY_AC}.temp", "value": str(ac_temp)})
+                params.append({"key": f"{KEY_AC}.duration", "value": str(duration)})
 
             # Defrost
             df_active = modus == KLIMA_MODUS_DEFROST
-            params.append({"key": "DF", "value": "true" if df_active else "false"})
+            params.append({"key": KEY_DF, "value": _bool(df_active)})
             if df_active:
-                params.append({"key": "DF.level", "value": "2"})
+                params.append({"key": f"{KEY_DF}.level", "value": "2"})
 
             # Rapid Warming (Heizen Max)
             rw_active = modus == KLIMA_MODUS_HEIZEN_MAX
-            params.append({"key": "RW", "value": "true" if rw_active else "false"})
+            params.append({"key": KEY_RW, "value": _bool(rw_active)})
 
             # Rapid Cooling (Cooling Max)
             rc_active = modus == KLIMA_MODUS_COOLING_MAX
-            params.append({"key": "RC", "value": "true" if rc_active else "false"})
+            params.append({"key": KEY_RC, "value": _bool(rc_active)})
 
             # Steering wheel heating (orthogonal)
             sw_active = call.data["steering_wheel"]
-            params.append({"key": "SW", "value": "true" if sw_active else "false"})
+            params.append({"key": KEY_SW, "value": _bool(sw_active)})
             if sw_active:
-                params.append({"key": "SW.level", "value": "3"})
-                params.append({"key": "SW.duration", "value": str(duration)})
+                params.append({"key": f"{KEY_SW}.level", "value": "3"})
+                params.append({"key": f"{KEY_SW}.duration", "value": str(duration)})
 
             # Seat heat 4× (orthogonal)
             seat_active_any = False
@@ -226,7 +234,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry):
                 level = call.data[seat_field]
                 seat_active = level > 0
                 params.append(
-                    {"key": service_code, "value": "true" if seat_active else "false"}
+                    {"key": service_code, "value": _bool(seat_active)}
                 )
                 if seat_active:
                     params.append({"key": f"{service_code}.level", "value": str(level)})
@@ -242,7 +250,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry):
             # Append operation=4 — required by Zeekr cloud for ZAF (EnvRegulation)
             # preconditioning-start. Without it the car silently drops most
             # subsystems (observed 2026-04-20: only SW/steering-wheel was applied).
-            params.append({"key": "operation", "value": "4"})
+            params.append({"key": KEY_OPERATION, "value": OP_ENV_REGULATION_START})
 
             setting = {"serviceParameters": params}
 
@@ -253,7 +261,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry):
 
             await target_coordinator.async_inc_invoke()
             success = await hass.async_add_executor_job(
-                vehicle.do_remote_control, "start", "ZAF", setting
+                vehicle.do_remote_control, "start", SERVICE_ZAF, setting
             )
             await target_coordinator.async_request_refresh()
 
@@ -319,22 +327,22 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry):
 
             # Send every subsystem as false — mirrors the app's "all off" call.
             params: list[dict[str, str]] = [
-                {"key": "AC", "value": "false"},
-                {"key": "DF", "value": "false"},
-                {"key": "RW", "value": "false"},
-                {"key": "RC", "value": "false"},
-                {"key": "SW", "value": "false"},
+                {"key": KEY_AC, "value": VALUE_FALSE},
+                {"key": KEY_DF, "value": VALUE_FALSE},
+                {"key": KEY_RW, "value": VALUE_FALSE},
+                {"key": KEY_RC, "value": VALUE_FALSE},
+                {"key": KEY_SW, "value": VALUE_FALSE},
             ]
             for service_code in SEAT_SERVICE_CODES.values():
-                params.append({"key": service_code, "value": "false"})
-            params.append({"key": "operation", "value": "4"})
+                params.append({"key": service_code, "value": VALUE_FALSE})
+            params.append({"key": KEY_OPERATION, "value": OP_ENV_REGULATION_START})
 
             setting = {"serviceParameters": params}
             _LOGGER.info("preconditioning_stop for %s", vin)
 
             await target_coordinator.async_inc_invoke()
             success = await hass.async_add_executor_job(
-                vehicle.do_remote_control, "start", "ZAF", setting
+                vehicle.do_remote_control, "start", SERVICE_ZAF, setting
             )
             await target_coordinator.async_request_refresh()
 

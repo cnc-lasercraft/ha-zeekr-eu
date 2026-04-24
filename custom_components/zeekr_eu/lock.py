@@ -15,6 +15,13 @@ from .const import DOMAIN
 from .coordinator import ZeekrCoordinator
 from .entity import ZeekrEntity
 from .herold import async_notify as herold_notify
+from .protocol import (
+    KEY_DOOR,
+    KEY_TARGET,
+    SERVICE_RDL,
+    SERVICE_RDO,
+    SERVICE_RDU,
+)
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -119,26 +126,19 @@ class ZeekrLock(ZeekrEntity, LockEntity):
         if self.field == "centralLockingStatus":
             # Lock all doors
             command = "start"
-            service_id = "RDL"
+            service_id = SERVICE_RDL
             setting = {
                 "serviceParameters": [
-                    {
-                        "key": "door",
-                        "value": "all"
-                    }
+                    {"key": KEY_DOOR, "value": "all"}
                 ]
             }
         elif self.field == "chargeLidDcAcStatus":
-            # Close charge lid (Lock)
-            # User: "stop is closed"
+            # Close charge lid (Lock). "stop" = close.
             command = "stop"
-            service_id = "RDO"
+            service_id = SERVICE_RDO
             setting = {
                 "serviceParameters": [
-                    {
-                        "key": "target",
-                        "value": "front-charge-lid"
-                    }
+                    {"key": KEY_TARGET, "value": "front-charge-lid"}
                 ]
             }
 
@@ -179,30 +179,21 @@ class ZeekrLock(ZeekrEntity, LockEntity):
         setting = None
 
         if self.field == "centralLockingStatus":
-            # Unlock all doors
-            # User: "stop" to unlock
-            # Service RDU = Remote Door Unlock (RDL is for Lock)
+            # Unlock all doors. RDU = Remote Door Unlock (RDL is Lock). "stop" = unlock.
             command = "stop"
-            service_id = "RDU"
+            service_id = SERVICE_RDU
             setting = {
                 "serviceParameters": [
-                    {
-                        "key": "door",
-                        "value": "all"
-                    }
+                    {"key": KEY_DOOR, "value": "all"}
                 ]
             }
         elif self.field == "chargeLidDcAcStatus":
-            # Open charge lid (Unlock)
-            # User: "start is open"
+            # Open charge lid (Unlock). "start" = open.
             command = "start"
-            service_id = "RDO"
+            service_id = SERVICE_RDO
             setting = {
                 "serviceParameters": [
-                    {
-                        "key": "target",
-                        "value": "front-charge-lid"
-                    }
+                    {"key": KEY_TARGET, "value": "front-charge-lid"}
                 ]
             }
 

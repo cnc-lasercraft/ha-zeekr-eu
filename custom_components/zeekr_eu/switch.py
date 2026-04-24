@@ -18,6 +18,15 @@ from .const import DOMAIN
 from .coordinator import ZeekrCoordinator
 from .entity import ZeekrEntity
 from .herold import async_notify as herold_notify
+from .protocol import (
+    KEY_DF,
+    KEY_RSM,
+    KEY_SW,
+    SERVICE_RCS,
+    SERVICE_RSM,
+    SERVICE_ZAF,
+    VALUE_TRUE,
+)
 from .vorbereitung import NUM_SLOTS, WEEKDAY_FIELDS
 
 _LOGGER = logging.getLogger(__name__)
@@ -378,54 +387,36 @@ class ZeekrSwitch(CoordinatorEntity[ZeekrCoordinator], SwitchEntity):
         command = "start"
 
         if self.field == "charging":
-            service_id = "RCS"
+            service_id = SERVICE_RCS
             setting = {
                 "serviceParameters": [
-                    {
-                        "key": "rcs.restart",
-                        "value": "1"
-                    }
+                    {"key": "rcs.restart", "value": "1"}
                 ]
             }
         elif self.field == "defrost":
-            service_id = "ZAF"
+            service_id = SERVICE_ZAF
             setting = {
                 "serviceParameters": [
-                    {
-                        "key": "DF",
-                        "value": "true"
-                    },
-                    {
-                        "key": "DF.level",
-                        "value": "2"
-                    }
+                    {"key": KEY_DF, "value": VALUE_TRUE},
+                    {"key": f"{KEY_DF}.level", "value": "2"},
                 ]
             }
         elif self.field == "steering_wheel_heat":
-            service_id = "ZAF"
+            service_id = SERVICE_ZAF
             duration = getattr(self.coordinator, "steering_wheel_duration", 15)
             setting = {
                 "serviceParameters": [
-                    {
-                        "key": "SW",
-                        "value": "true"
-                    },
-                    {
-                        "key": "SW.duration",
-                        "value": str(duration)
-                    },
-                    {
-                        "key": "SW.level",
-                        "value": "3"
-                    }
+                    {"key": KEY_SW, "value": VALUE_TRUE},
+                    {"key": f"{KEY_SW}.duration", "value": str(duration)},
+                    {"key": f"{KEY_SW}.level", "value": "3"},
                 ]
             }
         elif self.field == "sentry_mode":
-            service_id = "RSM"
+            service_id = SERVICE_RSM
             setting = {
                 "serviceParameters": [
                     {
-                        "key": "rsm",
+                        "key": KEY_RSM,
                         "value": "6"
                     }
                 ]
@@ -516,44 +507,32 @@ class ZeekrSwitch(CoordinatorEntity[ZeekrCoordinator], SwitchEntity):
 
         if self.field == "defrost":
             command = "start"
-            service_id = "ZAF"
+            service_id = SERVICE_ZAF
             setting = {
                 "serviceParameters": [
-                    {
-                        "key": "DF",
-                        "value": "false"
-                    }
+                    {"key": KEY_DF, "value": "false"}
                 ]
             }
         elif self.field == "charging":
-            service_id = "RCS"
+            service_id = SERVICE_RCS
             setting = {
                 "serviceParameters": [
-                    {
-                        "key": "rcs.terminate",
-                        "value": "1"
-                    }
+                    {"key": "rcs.terminate", "value": "1"}
                 ]
             }
         elif self.field == "steering_wheel_heat":
             command = "start"
-            service_id = "ZAF"
+            service_id = SERVICE_ZAF
             setting = {
                 "serviceParameters": [
-                    {
-                        "key": "SW",
-                        "value": "false"
-                    }
+                    {"key": KEY_SW, "value": "false"}
                 ]
             }
         elif self.field == "sentry_mode":
-            service_id = "RSM"
+            service_id = SERVICE_RSM
             setting = {
                 "serviceParameters": [
-                    {
-                        "key": "rsm",
-                        "value": "6"
-                    }
+                    {"key": KEY_RSM, "value": "6"}
                 ]
             }
 

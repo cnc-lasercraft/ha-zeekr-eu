@@ -477,6 +477,9 @@ class ZeekrClient:
 
         extra_header = {"X-VIN": self._get_encrypted_vin(vin)}
 
+        # Charging-related commands use the dedicated charge-control endpoint.
+        # Kept as literal strings here so api/ stays standalone (no coupling
+        # back to the CC-level protocol module).
         if serviceID == "RCS":
             endpoint = const.CHARGE_CONTROL_URL
         else:

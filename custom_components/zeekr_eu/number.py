@@ -17,6 +17,7 @@ from .const import DOMAIN
 from .coordinator import ZeekrCoordinator
 from .entity import ZeekrEntity
 from .herold import async_notify as herold_notify
+from .protocol import SERVICE_RCS
 from .vorbereitung import NUM_SLOTS
 
 _LOGGER = logging.getLogger(__name__)
@@ -349,7 +350,7 @@ class ZeekrChargingLimitNumber(ZeekrEntity, RestoreNumber):
             return
 
         command = "start"
-        service_id = "RCS"
+        service_id = SERVICE_RCS
         # API expects value * 10 (e.g. 80.2% -> 802)
         # We handle full integers, so 80% -> 800
         soc_value = int(value * 10)
