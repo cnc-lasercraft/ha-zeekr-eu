@@ -11,6 +11,7 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity import EntityCategory
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
+from homeassistant.helpers.event import async_call_later
 from homeassistant.helpers.restore_state import RestoreEntity
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
@@ -149,7 +150,15 @@ class _VorbereitungBoolSwitchBase(ZeekrEntity, RestoreEntity, SwitchEntity):
 
 
 class ZeekrDeadlineAktivSwitch(ZeekrEntity, RestoreEntity, SwitchEntity):
-    """Toggle: Deadline ist scharf geschaltet. huawei_solar liest diesen Wert."""
+    """Toggle: Deadline ist scharf geschaltet. huawei_solar liest diesen Wert.
+
+    Automatically turns itself off 24 h after it was switched on, so that a
+    manually scheduled one-off deadline doesn't keep firing every day.
+    Scheduler-card-driven weekly plans re-arm the switch on each slot, so
+    the auto-off is harmless for recurring use.
+    """
+
+    _AUTO_OFF_SECONDS = 24 * 3600
 
     _attr_has_entity_name = True
     _attr_entity_category = EntityCategory.CONFIG
@@ -159,24 +168,54 @@ class ZeekrDeadlineAktivSwitch(ZeekrEntity, RestoreEntity, SwitchEntity):
         super().__init__(coordinator, vin)
         self._attr_name = "Deadline Aktiv"
         self._attr_unique_id = f"{vin}_deadline_aktiv"
+        self._auto_off_cancel: Any = None
 
     @property
     def is_on(self) -> bool | None:
         return bool(self.coordinator.get_config(self.vin).deadline_aktiv)
 
+    def _cancel_auto_off(self) -> None:
+        if self._auto_off_cancel is not None:
+            self._auto_off_cancel()
+            self._auto_off_cancel = None
+
+    def _schedule_auto_off(self) -> None:
+        self._cancel_auto_off()
+
+        async def _auto_off(_now) -> None:
+            self._auto_off_cancel = None
+            if self.coordinator.get_config(self.vin).deadline_aktiv:
+                _LOGGER.info("Deadline Aktiv auto-off for %s after 24h", self.vin)
+                self.coordinator.get_config(self.vin).deadline_aktiv = False
+                self.async_write_ha_state()
+
+        self._auto_off_cancel = async_call_later(
+            self.hass, self._AUTO_OFF_SECONDS, _auto_off
+        )
+
     async def async_turn_on(self, **kwargs: Any) -> None:
         self.coordinator.get_config(self.vin).deadline_aktiv = True
         self.async_write_ha_state()
+        self._schedule_auto_off()
 
     async def async_turn_off(self, **kwargs: Any) -> None:
         self.coordinator.get_config(self.vin).deadline_aktiv = False
         self.async_write_ha_state()
+        self._cancel_auto_off()
 
     async def async_added_to_hass(self) -> None:
         await super().async_added_to_hass()
         last = await self.async_get_last_state()
         if last and last.state in ("on", "off"):
             self.coordinator.get_config(self.vin).deadline_aktiv = last.state == "on"
+            if last.state == "on":
+                # Restart the 24h clock from process start rather than from
+                # the original on-time (we don't persist the exact timestamp).
+                self._schedule_auto_off()
+
+    async def async_will_remove_from_hass(self) -> None:
+        self._cancel_auto_off()
+        await super().async_will_remove_from_hass()
 
 
 class ZeekrSlotBoolSwitch(_VorbereitungBoolSwitchBase):
