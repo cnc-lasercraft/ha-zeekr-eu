@@ -10,10 +10,10 @@ from homeassistant.components.lock import LockEntity
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
-from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .const import DOMAIN
 from .coordinator import ZeekrCoordinator
+from .entity import ZeekrEntity
 from .herold import async_notify as herold_notify
 
 _LOGGER = logging.getLogger(__name__)
@@ -51,7 +51,7 @@ async def async_setup_entry(
     async_add_entities(entities)
 
 
-class ZeekrLock(CoordinatorEntity, LockEntity):
+class ZeekrLock(ZeekrEntity, LockEntity):
     """Zeekr Lock class representing various latch/lock states."""
 
     def __init__(
@@ -63,8 +63,7 @@ class ZeekrLock(CoordinatorEntity, LockEntity):
         category: str,
     ) -> None:
         """Initialize the lock entity for a specific field."""
-        super().__init__(coordinator)
-        self.vin = vin
+        super().__init__(coordinator, vin)
         self.field = field
         self.category = category
         self._attr_name = f"Zeekr {vin[-4:] if vin else ''} {label}"
@@ -250,12 +249,3 @@ class ZeekrLock(CoordinatorEntity, LockEntity):
         elif self.field == "chargeLidDcAcStatus":
             # Locked (Closed)="2", Unlocked (Open)="1"
             status[self.field] = "2" if locked else "1"
-
-    @property
-    def device_info(self):
-        """Return device info."""
-        return {
-            "identifiers": {(DOMAIN, self.vin)},
-            "name": f"Zeekr {self.vin}",
-            "manufacturer": "Zeekr",
-        }

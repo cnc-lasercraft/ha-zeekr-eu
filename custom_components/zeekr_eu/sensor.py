@@ -28,6 +28,7 @@ from homeassistant.helpers.update_coordinator import CoordinatorEntity
 from .api import zeekr_app_sig
 from .const import DOMAIN
 from .coordinator import ZeekrCoordinator
+from .entity import ZeekrEntity
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -559,7 +560,7 @@ async def async_setup_entry(
     async_add_entities(entities)
 
 
-class ZeekrSensor(CoordinatorEntity, SensorEntity):
+class ZeekrSensor(ZeekrEntity, SensorEntity):
     """Zeekr Sensor class."""
 
     def __init__(
@@ -574,8 +575,7 @@ class ZeekrSensor(CoordinatorEntity, SensorEntity):
         state_class: SensorStateClass | None = None,
     ) -> None:
         """Initialize the sensor."""
-        super().__init__(coordinator)
-        self.vin = vin
+        super().__init__(coordinator, vin)
         self.key = key
         self._attr_name = f"Zeekr {vin[-4:] if vin else ''} {name}"
         self._attr_unique_id = f"{vin}_{key}"
@@ -591,15 +591,6 @@ class ZeekrSensor(CoordinatorEntity, SensorEntity):
         if not data:
             return None
         return self._value_fn(data)
-
-    @property
-    def device_info(self):
-        """Return device info."""
-        return {
-            "identifiers": {(DOMAIN, self.vin)},
-            "name": f"Zeekr {self.vin}",
-            "manufacturer": "Zeekr",
-        }
 
 
 class ZeekrAPIStatusSensor(CoordinatorEntity, SensorEntity):
@@ -705,11 +696,10 @@ class ZeekrAPIStatSensor(CoordinatorEntity, SensorEntity):
         }
 
 
-class ZeekrChargerStateSensor(CoordinatorEntity, SensorEntity):
+class ZeekrChargerStateSensor(ZeekrEntity, SensorEntity):
     """Sensor to expose raw chargerState value for diagnostics."""
     def __init__(self, coordinator: ZeekrCoordinator, vin: str):
-        super().__init__(coordinator)
-        self.vin = vin
+        super().__init__(coordinator, vin)
         self._attr_name = f"Zeekr {vin[-4:] if vin else ''} Charger State"
         self._attr_unique_id = f"{vin}_charger_state"
 
@@ -726,13 +716,4 @@ class ZeekrChargerStateSensor(CoordinatorEntity, SensorEntity):
     def extra_state_attributes(self):
         return {
             "raw_charger_state": self.state
-        }
-
-    @property
-    def device_info(self):
-        """Return device info to attach sensor to car device."""
-        return {
-            "identifiers": {(DOMAIN, self.vin)},
-            "name": f"Zeekr {self.vin}",
-            "manufacturer": "Zeekr",
         }

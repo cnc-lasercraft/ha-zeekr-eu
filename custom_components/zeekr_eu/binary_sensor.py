@@ -11,10 +11,10 @@ from homeassistant.components.binary_sensor import (
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
-from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .const import DOMAIN
 from .coordinator import ZeekrCoordinator
+from .entity import ZeekrEntity
 
 
 def _parse_storage_box_status(value) -> bool | None:
@@ -30,7 +30,7 @@ def _parse_storage_box_status(value) -> bool | None:
         return None
 
 
-class ZeekrBinarySensor(CoordinatorEntity, BinarySensorEntity):
+class ZeekrBinarySensor(ZeekrEntity, BinarySensorEntity):
     """Zeekr Binary Sensor class."""
 
     def __init__(
@@ -43,8 +43,7 @@ class ZeekrBinarySensor(CoordinatorEntity, BinarySensorEntity):
         device_class: BinarySensorDeviceClass | None = None,
     ) -> None:
         """Initialize the binary sensor."""
-        super().__init__(coordinator)
-        self.vin = vin
+        super().__init__(coordinator, vin)
         self.key = key
         self._attr_name = f"Zeekr {vin[-4:] if vin else ''} {name}"
         self._attr_unique_id = f"{vin}_{key}"
@@ -58,15 +57,6 @@ class ZeekrBinarySensor(CoordinatorEntity, BinarySensorEntity):
         if not data:
             return None
         return self._value_fn(data)
-
-    @property
-    def device_info(self):
-        """Return device info."""
-        return {
-            "identifiers": {(DOMAIN, self.vin)},
-            "name": f"Zeekr {self.vin}",
-            "manufacturer": "Zeekr",
-        }
 
 
 async def async_setup_entry(
@@ -260,7 +250,7 @@ def _read_soc(coordinator, vin) -> float | None:
         return None
 
 
-class ZeekrChargingNeededBinarySensor(CoordinatorEntity, BinarySensorEntity):
+class ZeekrChargingNeededBinarySensor(ZeekrEntity, BinarySensorEntity):
     """Binary sensor that reports True when SoC is below the configured threshold."""
 
     _attr_device_class = BinarySensorDeviceClass.BATTERY
@@ -268,8 +258,7 @@ class ZeekrChargingNeededBinarySensor(CoordinatorEntity, BinarySensorEntity):
 
     def __init__(self, coordinator: ZeekrCoordinator, vin: str) -> None:
         """Initialize the entity."""
-        super().__init__(coordinator)
-        self.vin = vin
+        super().__init__(coordinator, vin)
         self._attr_name = f"Zeekr {vin[-4:] if vin else ''} Charging Needed"
         self._attr_unique_id = f"{vin}_charging_needed"
 
@@ -306,25 +295,15 @@ class ZeekrChargingNeededBinarySensor(CoordinatorEntity, BinarySensorEntity):
             "threshold": self._threshold(),
         }
 
-    @property
-    def device_info(self):
-        """Return device info."""
-        return {
-            "identifiers": {(DOMAIN, self.vin)},
-            "name": f"Zeekr {self.vin}",
-            "manufacturer": "Zeekr",
-        }
 
-
-class ZeekrPvLadewunschBinarySensor(CoordinatorEntity, BinarySensorEntity):
+class ZeekrPvLadewunschBinarySensor(ZeekrEntity, BinarySensorEntity):
     """Binary sensor that reports True when SoC is below the per-VIN PV ceiling."""
 
     _attr_icon = "mdi:solar-power-variant"
 
     def __init__(self, coordinator: ZeekrCoordinator, vin: str) -> None:
         """Initialize the entity."""
-        super().__init__(coordinator)
-        self.vin = vin
+        super().__init__(coordinator, vin)
         self._attr_name = f"Zeekr {vin[-4:] if vin else ''} PV Ladewunsch"
         self._attr_unique_id = f"{vin}_pv_ladewunsch"
 
@@ -359,13 +338,4 @@ class ZeekrPvLadewunschBinarySensor(CoordinatorEntity, BinarySensorEntity):
         return {
             "state_of_charge": self._current_soc(),
             "pv_ceiling_soc": self._ceiling(),
-        }
-
-    @property
-    def device_info(self):
-        """Return device info."""
-        return {
-            "identifiers": {(DOMAIN, self.vin)},
-            "name": f"Zeekr {self.vin}",
-            "manufacturer": "Zeekr",
         }
