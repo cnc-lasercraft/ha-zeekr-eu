@@ -76,6 +76,11 @@ class ZeekrCoordinator(DataUpdateCoordinator):
         self.zeekr_config: dict[str, ZeekrConfigState] = {}
         # Per-vehicle tracking state for Herold notifications
         self._notify_state: dict[str, dict[str, Any]] = {}
+        # Per-vehicle throttle for the journey-log poll. Trips don't change
+        # often; refresh every 30 min instead of on every status poll.
+        self._journey_log_last_poll: dict[str, datetime] = {}
+        self._journey_log_cache: dict[str, dict[str, Any]] = {}
+        self._JOURNEY_LOG_INTERVAL = timedelta(minutes=30)
         polling_interval = entry.data.get(CONF_POLLING_INTERVAL, DEFAULT_POLLING_INTERVAL)
         super().__init__(
             hass,
@@ -196,6 +201,11 @@ class ZeekrCoordinator(DataUpdateCoordinator):
                 except Exception as limit_err:
                     _LOGGER.debug("Error fetching charging limit for %s: %s", vehicle.vin, limit_err)
 
+                # Journey log — throttled to once per 30 min per vehicle.
+                journey = await self._maybe_fetch_journey_log(vehicle)
+                if journey is not None:
+                    vehicle_data["journeyLog"] = journey
+
                 data[vehicle.vin] = vehicle_data
 
             # Update latest poll time on every automatic poll
@@ -217,6 +227,27 @@ class ZeekrCoordinator(DataUpdateCoordinator):
                 _LOGGER.debug("Notification processing failed: %s", exc)
             return data
 
+    async def _maybe_fetch_journey_log(self, vehicle) -> dict[str, Any] | None:
+        """Throttled journey-log fetch. Returns cached value when not due."""
+        vin = vehicle.vin
+        now = datetime.now()
+        last = self._journey_log_last_poll.get(vin)
+        if last is not None and now - last < self._JOURNEY_LOG_INTERVAL:
+            return self._journey_log_cache.get(vin)
+        try:
+            await self.request_stats.async_inc_request()
+            log = await self.hass.async_add_executor_job(
+                vehicle.get_journey_log, 30, 1, -1, 30  # page_size, page, last_id, days
+            )
+        except Exception as exc:  # noqa: BLE001
+            _LOGGER.debug("Error fetching journey log for %s: %s", vin, exc)
+            return self._journey_log_cache.get(vin)
+        if not log:
+            return self._journey_log_cache.get(vin)
+        self._journey_log_last_poll[vin] = now
+        self._journey_log_cache[vin] = log
+        return log
+
     def _get_notify_state(self, vin: str) -> dict[str, Any]:
         """Return per-vehicle notification tracking state, lazily created."""
         state = self._notify_state.get(vin)
@@ -232,6 +263,8 @@ class ZeekrCoordinator(DataUpdateCoordinator):
                 "unlocked_notified": False,
                 "deadline_notplugged_date": None,
                 "deadline_verpasst_date": None,
+                "tire_warn_active": False,
+                "service_warn_date": None,
             }
             self._notify_state[vin] = state
         return state
@@ -248,11 +281,15 @@ class ZeekrCoordinator(DataUpdateCoordinator):
             climate = add.get("climateStatus", {}) or {}
             short_vin = vin[-4:]
 
+            maintenance = add.get("maintenanceStatus", {}) or {}
+
             await self._check_low_soc(vin, short_vin, ev, state, cfg)
             await self._check_charging_transition(vin, short_vin, ev, state)
             await self._check_open_durations(vin, short_vin, safety, climate, state, cfg, now_local)
             await self._check_unlocked(vin, short_vin, safety, state, cfg, now_local)
             await self._check_deadline(vin, short_vin, ev, state, cfg, now_local)
+            await self._check_tire_warning(vin, short_vin, maintenance, state)
+            await self._check_service_due(vin, short_vin, maintenance, state, cfg, now_local)
 
     def _is_at_home(self, short_vin: str) -> bool | None:
         """True if the device tracker reports the car is in zone home.
@@ -508,6 +545,71 @@ class ZeekrCoordinator(DataUpdateCoordinator):
                     f"Ziel {cfg.deadline_soc:.0f}%."
                 ),
                 severity="warnung",
+            )
+
+    async def _check_tire_warning(
+        self,
+        vin: str,
+        short_vin: str,
+        maintenance: dict,
+        state: dict[str, Any],
+    ) -> None:
+        """Auto-internal tire pre-warning across the four corners."""
+        TIRE_FIELDS = {
+            "tyrePreWarningDriver": "Fahrer",
+            "tyrePreWarningPassenger": "Beifahrer",
+            "tyrePreWarningDriverRear": "Hinten links",
+            "tyrePreWarningPassengerRear": "Hinten rechts",
+        }
+        warned = []
+        for field, label in TIRE_FIELDS.items():
+            val = maintenance.get(field)
+            if val is None:
+                continue
+            try:
+                if int(val) != 0:
+                    warned.append(label)
+            except (TypeError, ValueError):
+                continue
+        if warned:
+            if not state["tire_warn_active"]:
+                state["tire_warn_active"] = True
+                await herold_notify(
+                    self.hass,
+                    topic="zeekr/reifen/druckverlust",
+                    titel=f"Zeekr {short_vin}: Reifen-Warnung",
+                    message=f"Auto meldet Reifenproblem: {', '.join(warned)}.",
+                    severity="warnung",
+                )
+        else:
+            state["tire_warn_active"] = False
+
+    async def _check_service_due(
+        self,
+        vin: str,
+        short_vin: str,
+        maintenance: dict,
+        state: dict[str, Any],
+        cfg: ZeekrConfigState,
+        now: datetime,
+    ) -> None:
+        try:
+            distance = int(maintenance.get("distanceToService"))
+        except (TypeError, ValueError):
+            return
+        threshold = int(cfg.warnung_service_km)
+        today = now.date()
+        if distance <= threshold and state["service_warn_date"] != today:
+            state["service_warn_date"] = today
+            await herold_notify(
+                self.hass,
+                topic="zeekr/wartung/erinnerung",
+                titel=f"Zeekr {short_vin}: Service in {distance} km",
+                message=(
+                    f"distanceToService = {distance} km (Schwelle {threshold} km). "
+                    "Termin vereinbaren."
+                ),
+                severity="info",
             )
 
     def _write_poll_archive(self, data: dict) -> None:

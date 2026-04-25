@@ -86,6 +86,18 @@ TOPICS: dict[str, dict[str, Any]] = {
         "default_severity": "warnung",
         "default_rollen": ["erwachsener"],
     },
+    "zeekr/reifen/druckverlust": {
+        "name": "Zeekr Reifendruck-Warnung",
+        "beschreibung": "Auto-internes tyrePreWarning ist aktiv für mind. einen Reifen.",
+        "default_severity": "warnung",
+        "default_rollen": ["erwachsener"],
+    },
+    "zeekr/wartung/erinnerung": {
+        "name": "Zeekr Service fällig",
+        "beschreibung": "distance_to_service unterhalb der konfigurierten Schwelle.",
+        "default_severity": "info",
+        "default_rollen": ["erwachsener"],
+    },
 }
 
 

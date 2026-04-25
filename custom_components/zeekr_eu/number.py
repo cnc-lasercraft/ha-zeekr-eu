@@ -139,6 +139,10 @@ def _make_settings_numbers(coordinator: ZeekrCoordinator, vin: str):
             coordinator, vin, "warnung_deadline_vorlauf_min",
             "Warnung Deadline Vorlauf", 0, 240, 5, UnitOfTime.MINUTES, "mdi:bell-outline",
         ),
+        ZeekrSettingsNumber(
+            coordinator, vin, "warnung_service_km",
+            "Warnung Service ab", 0, 5000, 100, "km", "mdi:wrench-clock",
+        ),
     ]
 
 

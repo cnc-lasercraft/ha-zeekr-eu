@@ -47,8 +47,125 @@ def build_vehicle_sensors(
     entities.extend(_position_sensors(coordinator, vin, sensor_cls))
     entities.extend(_remote_mode_sensors(coordinator, vin, sensor_cls))
     entities.extend(_misc_sensors(coordinator, vin, sensor_cls))
+    entities.extend(_journey_sensors(coordinator, vin, sensor_cls))
     entities.append(charger_state_cls(coordinator, vin))
     return entities
+
+
+# ---------------------------------------------------------------------------
+# Journey log (last trip + 30-day aggregates)
+# ---------------------------------------------------------------------------
+def _journey_log_list(d: dict) -> list[dict]:
+    log = d.get("journeyLog") or {}
+    # API returns trips under a nested "data" key (the outer dict already
+    # had its top-level data stripped by the client). Older versions of the
+    # docstring suggested "list" — keep that as a fallback in case of a
+    # version where the schema changes.
+    trips = log.get("data")
+    if not isinstance(trips, list):
+        trips = log.get("list")
+    return trips if isinstance(trips, list) else []
+
+
+def _last_trip(d: dict) -> dict | None:
+    trips = _journey_log_list(d)
+    return trips[0] if trips else None
+
+
+def _ms_to_dt(ms):
+    from datetime import datetime, timezone
+    try:
+        return datetime.fromtimestamp(int(ms) / 1000, tz=timezone.utc)
+    except (TypeError, ValueError):
+        return None
+
+
+def _sum(trips, key):
+    total = 0.0
+    for t in trips:
+        try:
+            total += float(t.get(key) or 0)
+        except (TypeError, ValueError):
+            continue
+    return total
+
+
+def _trip_duration_min(trip):
+    if not trip:
+        return None
+    dur = trip.get("duration")
+    if dur is None:
+        return None
+    try:
+        return round(float(dur) / 60, 1)
+    except (TypeError, ValueError):
+        return None
+
+
+def _journey_sensors(coordinator, vin, S):
+    return [
+        # Last trip
+        S(
+            coordinator, vin, "letzte_fahrt_distanz", "Letzte Fahrt Distanz",
+            lambda d: ((_last_trip(d) or {}).get("distance")),
+            UnitOfLength.KILOMETERS, SensorDeviceClass.DISTANCE,
+            SensorStateClass.MEASUREMENT,
+        ),
+        S(
+            coordinator, vin, "letzte_fahrt_dauer", "Letzte Fahrt Dauer",
+            lambda d: _trip_duration_min(_last_trip(d)),
+            UnitOfTime.MINUTES, SensorDeviceClass.DURATION,
+            SensorStateClass.MEASUREMENT,
+        ),
+        S(
+            coordinator, vin, "letzte_fahrt_avg_speed", "Letzte Fahrt Durchschnittsgeschwindigkeit",
+            lambda d: ((_last_trip(d) or {}).get("avgSpeed")),
+            UnitOfSpeed.KILOMETERS_PER_HOUR, SensorDeviceClass.SPEED,
+            SensorStateClass.MEASUREMENT,
+        ),
+        S(
+            coordinator, vin, "letzte_fahrt_verbrauch", "Letzte Fahrt Verbrauch",
+            lambda d: ((_last_trip(d) or {}).get("energyConsumption")),
+            "kWh", SensorDeviceClass.ENERGY,
+            SensorStateClass.MEASUREMENT,
+        ),
+        S(
+            coordinator, vin, "letzte_fahrt_ende", "Letzte Fahrt Ende",
+            lambda d: _ms_to_dt((_last_trip(d) or {}).get("endTime")),
+            None, SensorDeviceClass.TIMESTAMP, None,
+        ),
+        # 30-day aggregates
+        S(
+            coordinator, vin, "fahrten_anzahl_30d", "Fahrten letzte 30 Tage",
+            lambda d: len(_journey_log_list(d)) or None,
+            None, None, None,
+        ),
+        S(
+            coordinator, vin, "gesamt_km_30d", "Gesamt km letzte 30 Tage",
+            lambda d: round(_sum(_journey_log_list(d), "distance"), 1) or None,
+            UnitOfLength.KILOMETERS, SensorDeviceClass.DISTANCE,
+            SensorStateClass.MEASUREMENT,
+        ),
+        S(
+            coordinator, vin, "gesamt_kwh_30d", "Gesamt kWh letzte 30 Tage",
+            lambda d: round(_sum(_journey_log_list(d), "energyConsumption"), 2) or None,
+            "kWh", SensorDeviceClass.ENERGY,
+            SensorStateClass.MEASUREMENT,
+        ),
+        S(
+            coordinator, vin, "avg_verbrauch_30d", "Verbrauch letzte 30 Tage (kWh/100km)",
+            lambda d: (
+                round(
+                    _sum(_journey_log_list(d), "energyConsumption")
+                    / _sum(_journey_log_list(d), "distance") * 100,
+                    2,
+                )
+                if _sum(_journey_log_list(d), "distance") > 0
+                else None
+            ),
+            "kWh/100km", None, SensorStateClass.MEASUREMENT,
+        ),
+    ]
 
 
 # ---------------------------------------------------------------------------

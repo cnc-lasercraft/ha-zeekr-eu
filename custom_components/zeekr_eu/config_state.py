@@ -55,6 +55,7 @@ class ZeekrConfigState:
     warnung_offen_min: int = 10              # Min: Tür/Fenster offen bevor Warnung
     warnung_unverriegelt_min: int = 30       # Min: unverriegelt bevor Warnung
     warnung_deadline_vorlauf_min: int = 60   # Min vor Deadline: "nicht eingesteckt"-Warnung
+    warnung_service_km: int = 1000           # km: Service-Erinnerung wenn distance_to_service darunter
 
     # Tires
     reifensaison: str = "Sommer"
