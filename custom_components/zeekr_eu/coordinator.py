@@ -254,6 +254,23 @@ class ZeekrCoordinator(DataUpdateCoordinator):
             await self._check_unlocked(vin, short_vin, safety, state, cfg, now_local)
             await self._check_deadline(vin, short_vin, ev, state, cfg, now_local)
 
+    def _is_at_home(self, short_vin: str) -> bool | None:
+        """True if the device tracker reports the car is in zone home.
+
+        Returns None when we cannot tell (entity missing / state unavailable),
+        so callers can fall back to "warn anyway" instead of suppressing
+        notifications for users without a configured home zone.
+        """
+        if short_vin is None:
+            return None
+        tracker_id = f"device_tracker.zeekr_{short_vin.lower()}_location"
+        s = self.hass.states.get(tracker_id)
+        if s is None:
+            return None
+        if s.state in (None, "", "unknown", "unavailable"):
+            return None
+        return s.state == "home"
+
     async def _check_low_soc(
         self,
         vin: str,
@@ -268,7 +285,13 @@ class ZeekrCoordinator(DataUpdateCoordinator):
             return
         plugged = str(ev.get("statusOfChargerConnection", "")) == "1"
         threshold = float(cfg.warnung_akku_soc)
-        if soc <= threshold and not plugged:
+        at_home = self._is_at_home(short_vin)
+        # Skip the reminder while driving: only fire when the car is at home
+        # (where it could actually be plugged in). When the home-zone state
+        # is unknown we keep the old "warn anyway" behavior so users without
+        # a configured home zone still get the alert.
+        suppress_away = at_home is False
+        if soc <= threshold and not plugged and not suppress_away:
             if not state["low_soc_active"]:
                 state["low_soc_active"] = True
                 await herold_notify(
