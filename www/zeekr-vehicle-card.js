@@ -10,7 +10,7 @@
 // ---------------------------------------------------------------------------
 // Constants
 // ---------------------------------------------------------------------------
-const CARD_VERSION = "2.0.0";
+const CARD_VERSION = "2.0.1";
 const CARD_NAME = "zeekr-vehicle-card";
 
 const SENSOR_MAP = {
@@ -713,6 +713,19 @@ class ZeekrVehicleCard extends HTMLElement {
     var chargeCurrent = stateNum(h, e.charge_current);
     var chargeVoltage = stateNum(h, e.charge_voltage);
     var chargeSpeed = stateNum(h, e.charge_speed);
+
+    // The Zeekr cloud often reports chargePower=0 / isCharging=false during AC
+    // sessions on an external OCPP wallbox even though the car is actively
+    // pulling current. Fall back to the wallbox sensor as ground truth: if it
+    // reports >1 kW we treat the car as charging and use that power value.
+    var wallboxPower = stateNum(h, "sensor.wallbox_1_power_active_import");
+    var wallboxCharging = wallboxPower !== null && wallboxPower > 1.0;
+    if (wallboxCharging) {
+      isCharging = true;
+      if (chargePower === null || chargePower < wallboxPower) {
+        chargePower = wallboxPower;
+      }
+    }
 
     var doors = {
       fl: isOn(h, e.door_fl),
