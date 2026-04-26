@@ -82,3 +82,50 @@ preconditioning_start:
           min: 0
           max: 3
           step: 1
+
+schedule_preconditioning:
+  name: Schedule Preconditioning (Cloud)
+  description: >
+    Stores a one-shot preconditioning schedule in the Zeekr cloud (timer 4).
+    The car runs the cabin pre-conditioning before the scheduled departure
+    time, even if Home Assistant is offline. Replaces any prior cloud plan.
+  fields:
+    vin:
+      name: VIN
+      description: Vehicle identification number.
+      required: true
+      example: "L6TZA1S4XSN095278"
+      selector:
+        text:
+    scheduled_time:
+      name: Departure Time
+      description: When you want to leave. The car starts climatising before this time.
+      required: true
+      selector:
+        datetime:
+    ac:
+      name: AC Pre-conditioning
+      description: Run AC/heating to reach target cabin temperature.
+      default: true
+      selector:
+        boolean:
+    steering_wheel:
+      name: Steering Wheel Heating
+      description: Pre-heat the steering wheel.
+      default: false
+      selector:
+        boolean:
+
+cancel_scheduled_preconditioning:
+  name: Cancel Scheduled Preconditioning (Cloud)
+  description: >
+    Disables the cloud-side travel plan (timer 4). Has no effect on the local
+    Vorklimatisieren-Wochenplan or running preconditioning sessions.
+  fields:
+    vin:
+      name: VIN
+      description: Vehicle identification number.
+      required: true
+      example: "L6TZA1S4XSN095278"
+      selector:
+        text:

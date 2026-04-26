@@ -33,6 +33,8 @@ CHARGING_PLAN_URL = "ms-charge-manage/api/v1.0/charge/getChargingPlan"
 LATEST_TRAVEL_PLAN_URL = "ms-charge-manage/api/v1.0/charge/getLatestTravelPlan"
 SET_CHARGE_PLAN_URL = "ms-charge-manage/api/v1.0/charge/setChargingPlan"
 SET_TRAVEL_PLAN_URL = "ms-charge-manage/api/v1.0/charge/setTravelPlan"
+GET_TRAVEL_PLAN_V2_URL = "ms-charge-manage/api/v2.0/charge/getTravelPlan"
+SET_TRAVEL_PLAN_V2_URL = "ms-charge-manage/api/v2.0/charge/setTravelPlan"
 JOURNEY_LOG_URL = "ms-vehicle-trail/v1.0/journalLog/trip/listForPage"
 TRIP_TRACKPOINTS_URL = "ms-vehicle-trail/v1.0/journalLog/trackpoint/list"
 

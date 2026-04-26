@@ -117,11 +117,6 @@ def _make_settings_numbers(coordinator: ZeekrCoordinator, vin: str):
             coordinator, vin, "deadline_soc",
             "Deadline SoC", 0, 100, 5, PERCENTAGE, "mdi:battery-charging-high",
         ),
-        # PV-Überschuss-Ceiling: Obergrenze fürs Weiterladen nach Deadline
-        ZeekrSettingsNumber(
-            coordinator, vin, "pv_ceiling_soc",
-            "PV Ceiling SoC", 70, 100, 5, PERCENTAGE, "mdi:solar-power-variant",
-        ),
         # Herold-Benachrichtigungs-Schwellwerte
         ZeekrSettingsNumber(
             coordinator, vin, "warnung_akku_soc",
@@ -311,9 +306,9 @@ class ZeekrChargingLimitNumber(ZeekrEntity, RestoreNumber):
     """Zeekr Charging Limit Number class."""
 
     _attr_has_entity_name = True
-    _attr_native_min_value = 50
+    _attr_native_min_value = 20
     _attr_native_max_value = 100
-    _attr_native_step = 5
+    _attr_native_step = 1
     _attr_native_unit_of_measurement = PERCENTAGE
     _attr_icon = "mdi:battery-charging-high"
 

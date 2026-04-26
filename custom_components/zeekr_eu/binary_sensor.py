@@ -297,7 +297,14 @@ class ZeekrChargingNeededBinarySensor(ZeekrEntity, BinarySensorEntity):
 
 
 class ZeekrPvLadewunschBinarySensor(ZeekrEntity, BinarySensorEntity):
-    """Binary sensor that reports True when SoC is below the per-VIN PV ceiling."""
+    """Binary sensor that reports True when SoC is below the car's charging limit.
+
+    Uses the cloud-side charging_limit (set via Zeekr app or our number entity)
+    as the single source of truth for "stop charging at this SoC". huawei_solar
+    reads the aggregated `aktives_fahrzeug_pv_ladewunsch` and gates PV charging
+    on it — without this gate the wallbox keeps trying to charge a car already
+    at its limit, triggering OCPP rejects.
+    """
 
     _attr_icon = "mdi:solar-power-variant"
 
@@ -320,22 +327,32 @@ class ZeekrPvLadewunschBinarySensor(ZeekrEntity, BinarySensorEntity):
         except (ValueError, TypeError):
             return None
 
-    def _ceiling(self) -> float:
-        """Return per-VIN PV ceiling SoC."""
-        return float(self.coordinator.get_config(self.vin).pv_ceiling_soc)
+    def _charging_limit(self) -> float | None:
+        """Return car's cloud-side charging limit (0-100), or None if unknown."""
+        try:
+            val = (
+                self.coordinator.data.get(self.vin, {})
+                .get("chargingLimit", {})
+                .get("soc")
+            )
+            # API returns value * 10 (e.g. 890 -> 89.0)
+            return float(val) / 10.0 if val not in (None, "") else None
+        except (ValueError, TypeError):
+            return None
 
     @property
     def is_on(self) -> bool | None:
-        """Return true if SoC is below the PV ceiling."""
+        """Return true if SoC is below the car's charging limit."""
         soc = self._current_soc()
-        if soc is None:
+        limit = self._charging_limit()
+        if soc is None or limit is None:
             return None
-        return soc < self._ceiling()
+        return soc < limit
 
     @property
     def extra_state_attributes(self):
-        """Expose SoC and ceiling for diagnostics."""
+        """Expose SoC and limit for diagnostics."""
         return {
             "state_of_charge": self._current_soc(),
-            "pv_ceiling_soc": self._ceiling(),
+            "charging_limit": self._charging_limit(),
         }

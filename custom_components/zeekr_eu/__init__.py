@@ -52,8 +52,23 @@ from .vorbereitung import (
 
 SERVICE_PRECONDITIONING_START = "preconditioning_start"
 SERVICE_PRECONDITIONING_STOP = "preconditioning_stop"
+SERVICE_SCHEDULE_PRECONDITIONING = "schedule_preconditioning"
+SERVICE_CANCEL_SCHEDULED_PRECONDITIONING = "cancel_scheduled_preconditioning"
 
 PRECONDITIONING_STOP_SCHEMA = vol.Schema({vol.Required("vin"): cv.string})
+
+SCHEDULE_PRECONDITIONING_SCHEMA = vol.Schema(
+    {
+        vol.Required("vin"): cv.string,
+        vol.Required("scheduled_time"): cv.datetime,
+        vol.Optional("ac", default=True): cv.boolean,
+        vol.Optional("steering_wheel", default=False): cv.boolean,
+    }
+)
+
+CANCEL_SCHEDULED_PRECONDITIONING_SCHEMA = vol.Schema(
+    {vol.Required("vin"): cv.string}
+)
 
 PRECONDITIONING_SCHEMA = vol.Schema(
     {
@@ -374,6 +389,119 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry):
             SERVICE_PRECONDITIONING_STOP,
             _handle_preconditioning_stop,
             schema=PRECONDITIONING_STOP_SCHEMA,
+        )
+
+    if not hass.services.has_service(DOMAIN, SERVICE_SCHEDULE_PRECONDITIONING):
+        async def _handle_schedule_preconditioning(call: ServiceCall) -> None:
+            vin = call.data["vin"]
+            scheduled_time = call.data["scheduled_time"]
+            ac = call.data["ac"]
+            steering_wheel = call.data["steering_wheel"]
+
+            target_coordinator: ZeekrCoordinator | None = None
+            for coord in hass.data[DOMAIN].values():
+                if not isinstance(coord, ZeekrCoordinator):
+                    continue
+                if coord.get_vehicle_by_vin(vin):
+                    target_coordinator = coord
+                    break
+            if target_coordinator is None:
+                raise HomeAssistantError(f"No vehicle with VIN {vin} found")
+
+            vehicle = target_coordinator.get_vehicle_by_vin(vin)
+
+            scheduled_ms = int(scheduled_time.timestamp() * 1000)
+
+            _LOGGER.info(
+                "schedule_preconditioning for %s at %s (ms=%d, ac=%s, sw=%s)",
+                vin, scheduled_time.isoformat(), scheduled_ms, ac, steering_wheel,
+            )
+
+            await target_coordinator.async_inc_invoke()
+            success = await hass.async_add_executor_job(
+                vehicle.set_travel_plan,
+                "start",
+                "",
+                str(scheduled_ms),
+                ac,
+                steering_wheel,
+            )
+
+            short_vin = vin[-4:] if vin else ""
+            if not success:
+                await herold_notify(
+                    hass,
+                    topic="zeekr/remote/fehlgeschlagen",
+                    titel=f"Zeekr {short_vin}: Vorheizen planen",
+                    message="Travel-Plan-Kommando wurde von der Zeekr-Cloud abgelehnt.",
+                    severity="warnung",
+                )
+                return
+
+            local_time = scheduled_time.astimezone().strftime("%d.%m. %H:%M")
+            await herold_notify(
+                hass,
+                topic="zeekr/vorheizen/fertig",
+                titel=f"Zeekr {short_vin}: Vorheizen geplant",
+                message=f"Auto klimatisiert vor {local_time} (Cloud-Plan).",
+                severity="info",
+            )
+
+        hass.services.async_register(
+            DOMAIN,
+            SERVICE_SCHEDULE_PRECONDITIONING,
+            _handle_schedule_preconditioning,
+            schema=SCHEDULE_PRECONDITIONING_SCHEMA,
+        )
+
+    if not hass.services.has_service(DOMAIN, SERVICE_CANCEL_SCHEDULED_PRECONDITIONING):
+        async def _handle_cancel_scheduled_preconditioning(call: ServiceCall) -> None:
+            vin = call.data["vin"]
+
+            target_coordinator: ZeekrCoordinator | None = None
+            for coord in hass.data[DOMAIN].values():
+                if not isinstance(coord, ZeekrCoordinator):
+                    continue
+                if coord.get_vehicle_by_vin(vin):
+                    target_coordinator = coord
+                    break
+            if target_coordinator is None:
+                raise HomeAssistantError(f"No vehicle with VIN {vin} found")
+
+            vehicle = target_coordinator.get_vehicle_by_vin(vin)
+
+            _LOGGER.info("cancel_scheduled_preconditioning for %s", vin)
+
+            await target_coordinator.async_inc_invoke()
+            success = await hass.async_add_executor_job(
+                vehicle.set_travel_plan,
+                "stop",
+            )
+
+            short_vin = vin[-4:] if vin else ""
+            if not success:
+                await herold_notify(
+                    hass,
+                    topic="zeekr/remote/fehlgeschlagen",
+                    titel=f"Zeekr {short_vin}: Vorheizen-Plan stoppen",
+                    message="Travel-Plan-Stop wurde von der Zeekr-Cloud abgelehnt.",
+                    severity="warnung",
+                )
+                return
+
+            await herold_notify(
+                hass,
+                topic="zeekr/vorheizen/fertig",
+                titel=f"Zeekr {short_vin}: Vorheizen-Plan abgesagt",
+                message="Cloud-Travel-Plan deaktiviert.",
+                severity="info",
+            )
+
+        hass.services.async_register(
+            DOMAIN,
+            SERVICE_CANCEL_SCHEDULED_PRECONDITIONING,
+            _handle_cancel_scheduled_preconditioning,
+            schema=CANCEL_SCHEDULED_PRECONDITIONING_SCHEMA,
         )
 
     entry.async_on_unload(entry.add_update_listener(async_reload_entry))

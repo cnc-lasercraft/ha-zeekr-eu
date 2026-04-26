@@ -126,7 +126,7 @@ def _journey_sensors(coordinator, vin, S):
         S(
             coordinator, vin, "letzte_fahrt_verbrauch", "Letzte Fahrt Verbrauch",
             lambda d: ((_last_trip(d) or {}).get("energyConsumption")),
-            "kWh", SensorDeviceClass.ENERGY,
+            "kWh", None,
             SensorStateClass.MEASUREMENT,
         ),
         S(
@@ -149,7 +149,7 @@ def _journey_sensors(coordinator, vin, S):
         S(
             coordinator, vin, "gesamt_kwh_30d", "Gesamt kWh letzte 30 Tage",
             lambda d: round(_sum(_journey_log_list(d), "energyConsumption"), 2) or None,
-            "kWh", SensorDeviceClass.ENERGY,
+            "kWh", None,
             SensorStateClass.MEASUREMENT,
         ),
         S(
@@ -202,6 +202,58 @@ def _energy_sensors(coordinator, vin, data, S):
             .get("electricVehicleStatus", {})
             .get("distanceToEmptyOnBattery20Soc"),
             UnitOfLength.KILOMETERS, SensorDeviceClass.DISTANCE,
+            SensorStateClass.MEASUREMENT,
+        ),
+        # Battery thermal management — all currently null at mild temps; populate
+        # only when the car actually heats/cools the HV battery (cold or hot).
+        S(
+            coordinator, vin, "battery_preheating_active", "Battery Preheating Active",
+            lambda d: d.get("additionalVehicleStatus", {})
+            .get("electricVehicleStatus", {})
+            .get("hvBatteryPreHeatingActive"),
+            None, None, None,
+        ),
+        S(
+            coordinator, vin, "battery_heat_mode_active", "Battery Heat Mode Active",
+            lambda d: d.get("additionalVehicleStatus", {})
+            .get("electricVehicleStatus", {})
+            .get("batteryHeatModeActive"),
+            None, None, None,
+        ),
+        S(
+            coordinator, vin, "battery_temp_status", "Battery Temp Status",
+            lambda d: d.get("additionalVehicleStatus", {})
+            .get("electricVehicleStatus", {})
+            .get("hvBatteryTempStatus"),
+            None, None, None,
+        ),
+        S(
+            coordinator, vin, "battery_htm_status", "Battery HTM Status",
+            lambda d: d.get("additionalVehicleStatus", {})
+            .get("electricVehicleStatus", {})
+            .get("hvBatteryHTMStatus"),
+            None, None, None,
+        ),
+        S(
+            coordinator, vin, "snowflake_level", "Snowflake Level",
+            lambda d: d.get("additionalVehicleStatus", {})
+            .get("electricVehicleStatus", {})
+            .get("hvSnowflakeLevel"),
+            None, None, None,
+        ),
+        S(
+            coordinator, vin, "hv_temp_level", "HV Temp Level",
+            lambda d: d.get("additionalVehicleStatus", {})
+            .get("electricVehicleStatus", {})
+            .get("hvTempLevel"),
+            None, None, None,
+        ),
+        S(
+            coordinator, vin, "vtm_temperature", "VTM Temperature",
+            lambda d: d.get("additionalVehicleStatus", {})
+            .get("climateStatus", {})
+            .get("vtmTemperature"),
+            UnitOfTemperature.CELSIUS, SensorDeviceClass.TEMPERATURE,
             SensorStateClass.MEASUREMENT,
         ),
     ]

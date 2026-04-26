@@ -36,8 +36,66 @@ async def async_setup_entry(
         entities.append(ZeekrDumpApiButton(coordinator, vehicle.vin))
         entities.append(ZeekrVorbereitungSofortButton(coordinator, vehicle.vin))
         entities.append(ZeekrVorbereitungStopButton(coordinator, vehicle.vin))
+        entities.append(ZeekrCloudTravelPlanSetzenButton(coordinator, vehicle.vin))
+        entities.append(ZeekrCloudTravelPlanAbsagenButton(coordinator, vehicle.vin))
 
     async_add_entities(entities)
+
+
+class ZeekrCloudTravelPlanSetzenButton(ZeekrEntity, ButtonEntity):
+    """Push the cloud travel plan to Zeekr's servers using the configured datetime/AC/SW."""
+
+    _attr_has_entity_name = True
+    _attr_icon = "mdi:cloud-upload"
+
+    def __init__(self, coordinator: ZeekrCoordinator, vin: str) -> None:
+        super().__init__(coordinator, vin)
+        self._attr_name = "Vorklimatisieren Cloud Setzen"
+        self._attr_unique_id = f"{vin}_cloud_travel_plan_setzen"
+
+    async def async_press(self) -> None:
+        cfg = self.coordinator.get_config(self.vin)
+        if cfg.cloud_travel_plan_zeit is None:
+            await herold_notify(
+                self.hass,
+                topic="zeekr/remote/fehlgeschlagen",
+                titel=f"Zeekr {self.vin[-4:] if self.vin else ''}: Cloud-Plan",
+                message="Keine Abfahrtszeit gesetzt — bitte 'Vorklimatisieren Cloud Zeit' wählen.",
+                severity="warnung",
+            )
+            return
+
+        await self.hass.services.async_call(
+            "zeekr_eu",
+            "schedule_preconditioning",
+            {
+                "vin": self.vin,
+                "scheduled_time": cfg.cloud_travel_plan_zeit,
+                "ac": cfg.cloud_travel_plan_ac,
+                "steering_wheel": cfg.cloud_travel_plan_lenkrad,
+            },
+            blocking=False,
+        )
+
+
+class ZeekrCloudTravelPlanAbsagenButton(ZeekrEntity, ButtonEntity):
+    """Cancel the cloud-side travel plan."""
+
+    _attr_has_entity_name = True
+    _attr_icon = "mdi:cloud-off-outline"
+
+    def __init__(self, coordinator: ZeekrCoordinator, vin: str) -> None:
+        super().__init__(coordinator, vin)
+        self._attr_name = "Vorklimatisieren Cloud Absagen"
+        self._attr_unique_id = f"{vin}_cloud_travel_plan_absagen"
+
+    async def async_press(self) -> None:
+        await self.hass.services.async_call(
+            "zeekr_eu",
+            "cancel_scheduled_preconditioning",
+            {"vin": self.vin},
+            blocking=False,
+        )
 
 
 class ZeekrVorbereitungSofortButton(ZeekrEntity, ButtonEntity):

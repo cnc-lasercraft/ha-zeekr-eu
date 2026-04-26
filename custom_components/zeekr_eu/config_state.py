@@ -7,7 +7,8 @@ now native to the integration so it ships as a self-contained CC.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from datetime import time as dtime
+from datetime import datetime, time as dtime
+from typing import Optional
 
 
 FARBE_OPTIONS = [
@@ -33,10 +34,6 @@ class ZeekrConfigState:
     farbe: str = "Moonlight White"
     modell: str = "Zeekr 7X"
 
-    # PV-Überschuss-Ceiling: bei Idle-angesteckt nach erreichter Deadline
-    # weiterladen bis hierhin (schont NMC-Akku vs. 100%).
-    pv_ceiling_soc: float = 90.0
-
     # Unterhalb dieses SoC schaltet binary_sensor.*_charging_needed auf on.
     charging_needed_threshold: float = 30.0
 
@@ -56,6 +53,13 @@ class ZeekrConfigState:
     warnung_unverriegelt_min: int = 30       # Min: unverriegelt bevor Warnung
     warnung_deadline_vorlauf_min: int = 60   # Min vor Deadline: "nicht eingesteckt"-Warnung
     warnung_service_km: int = 1000           # km: Service-Erinnerung wenn distance_to_service darunter
+
+    # Cloud Travel Plan (Zeekr-Cloud Vorklimatisierungs-Schedule, timer 4)
+    # Reine UI-Persistenz; der tatsächliche Plan lebt in der Cloud nach
+    # erfolgreichem schedule_preconditioning-Service-Call.
+    cloud_travel_plan_zeit: Optional[datetime] = None
+    cloud_travel_plan_ac: bool = True
+    cloud_travel_plan_lenkrad: bool = False
 
     # Tires
     reifensaison: str = "Sommer"

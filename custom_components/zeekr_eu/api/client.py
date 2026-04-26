@@ -644,15 +644,22 @@ class ZeekrClient:
         if not self.logged_in:
             raise ZeekrException("Not logged in")
 
+        # Body fields mirror the official Zeekr app's setTravelPlan call.
+        # btActive=true is the key bit: with btActive=false the cloud
+        # accepts the request (success:true) but the car-side scheduler
+        # never triggers the plan. scheduledTime must be null for recurring
+        # plans (driven by scheduleList) and a ms-timestamp string for
+        # one-shot plans.
+        is_recurring = bool(schedule_list)
         body = {
             "ac": "true" if ac_preconditioning else "false",
-            "btActive": False,
+            "btActive": True,
             "btTempActive": False,
             "bw": "1" if steering_wheel_heating else "0",
             "bwl": "1",
             "command": command,
             "scheduleList": schedule_list or [],
-            "scheduledTime": scheduled_time,
+            "scheduledTime": None if is_recurring else scheduled_time,
             "timerId": timer_id,
         }
 
@@ -825,7 +832,7 @@ class ZeekrClient:
         except Exception as e:
             results["charge_plan"] = {"error": str(e)}
 
-        # 6. Travel Plan
+        # 6. Travel Plan (V1)
         try:
             results["travel_plan"] = network.appSignedGet(
                 self,
@@ -834,6 +841,17 @@ class ZeekrClient:
             )
         except Exception as e:
             results["travel_plan"] = {"error": str(e)}
+
+        # 6b. Travel Plan V2 (POST despite "get" — that's how the app does it)
+        try:
+            results["travel_plan_v2"] = network.appSignedPost(
+                self,
+                f"{self.region_login_server}{const.GET_TRAVEL_PLAN_V2_URL}",
+                "{}",
+                extra_headers={"X-VIN": self._get_encrypted_vin(vin)},
+            )
+        except Exception as e:
+            results["travel_plan_v2"] = {"error": str(e)}
 
         # 7. Journey Log - fetch all pages
         try:

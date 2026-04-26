@@ -101,7 +101,90 @@ async def async_setup_entry(
             )
         )
 
+        entities.append(ZeekrCloudTravelPlanAcSwitch(coordinator, vin))
+        entities.append(ZeekrCloudTravelPlanLenkradSwitch(coordinator, vin))
+
     async_add_entities(entities)
+
+
+class _CloudTravelPlanBoolSwitchBase(ZeekrEntity, RestoreEntity, SwitchEntity):
+    """Boolean switch backed by ZeekrConfigState fields for the cloud travel plan."""
+
+    _attr_has_entity_name = True
+    _attr_entity_category = EntityCategory.CONFIG
+
+    def __init__(
+        self,
+        coordinator: ZeekrCoordinator,
+        vin: str,
+        unique_suffix: str,
+        name: str,
+        icon: str,
+    ) -> None:
+        super().__init__(coordinator, vin)
+        self._attr_name = name
+        self._attr_unique_id = f"{vin}_{unique_suffix}"
+        self._attr_icon = icon
+
+    def _read(self) -> bool:
+        raise NotImplementedError
+
+    def _write(self, value: bool) -> None:
+        raise NotImplementedError
+
+    @property
+    def is_on(self) -> bool | None:
+        return bool(self._read())
+
+    async def async_turn_on(self, **kwargs: Any) -> None:
+        self._write(True)
+        self.async_write_ha_state()
+
+    async def async_turn_off(self, **kwargs: Any) -> None:
+        self._write(False)
+        self.async_write_ha_state()
+
+    async def async_added_to_hass(self) -> None:
+        await super().async_added_to_hass()
+        last = await self.async_get_last_state()
+        if last and last.state in ("on", "off"):
+            self._write(last.state == "on")
+
+
+class ZeekrCloudTravelPlanAcSwitch(_CloudTravelPlanBoolSwitchBase):
+    """AC pre-conditioning toggle for the cloud travel plan."""
+
+    def __init__(self, coordinator: ZeekrCoordinator, vin: str) -> None:
+        super().__init__(
+            coordinator, vin,
+            unique_suffix="cloud_travel_plan_ac",
+            name="Vorklimatisieren Cloud AC",
+            icon="mdi:air-conditioner",
+        )
+
+    def _read(self) -> bool:
+        return self.coordinator.get_config(self.vin).cloud_travel_plan_ac
+
+    def _write(self, value: bool) -> None:
+        self.coordinator.get_config(self.vin).cloud_travel_plan_ac = value
+
+
+class ZeekrCloudTravelPlanLenkradSwitch(_CloudTravelPlanBoolSwitchBase):
+    """Steering wheel heat toggle for the cloud travel plan."""
+
+    def __init__(self, coordinator: ZeekrCoordinator, vin: str) -> None:
+        super().__init__(
+            coordinator, vin,
+            unique_suffix="cloud_travel_plan_lenkrad",
+            name="Vorklimatisieren Cloud Lenkrad",
+            icon="mdi:steering",
+        )
+
+    def _read(self) -> bool:
+        return self.coordinator.get_config(self.vin).cloud_travel_plan_lenkrad
+
+    def _write(self, value: bool) -> None:
+        self.coordinator.get_config(self.vin).cloud_travel_plan_lenkrad = value
 
 
 class _VorbereitungBoolSwitchBase(ZeekrEntity, RestoreEntity, SwitchEntity):
