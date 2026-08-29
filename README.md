@@ -31,6 +31,36 @@ Custom Component for Home Assistant to integrate Zeekr vehicles (EU region) with
 2. Restart Home Assistant
 3. Go to Settings > Devices & Services > Add Integration > "Zeekr EU"
 
+## Vehicle Card (optional)
+
+A Lovelace card showing a top-down view of the car with live door, window and
+tyre state, plus charging and climate status.
+
+**Install:** copy `www/zeekr-vehicle-card.js` into your Home Assistant
+`config/www/` directory, then register it under
+*Settings > Dashboards > Resources* as a **JavaScript module**:
+
+```
+/local/zeekr-vehicle-card.js
+```
+
+**Use:** add the card to a dashboard. No configuration is required — it finds
+its entities through the integration's own registry entries, so it works
+regardless of how your entity IDs happen to be named:
+
+```yaml
+type: custom:zeekr-vehicle-card
+```
+
+Optional settings:
+
+| Option | Description |
+|--------|-------------|
+| `device_id` | Which vehicle to show. Only needed if you have more than one; the editor offers a picker. |
+| `wallbox_power_entity` | A power sensor from your wallbox. The Zeekr cloud often reports 0 kW during AC charging even while the car is drawing current; if this sensor reads above 1 kW the card uses it instead. |
+| `entities` | Pin individual entities by hand, e.g. `entities: {battery_level: sensor.my_own}`. Overrides automatic detection. |
+| `tire_season`, `tire_front_summer`, `tire_rear_summer`, `tire_front_winter`, `tire_rear_winter` | Target tyre pressures used to colour the readings. Also editable in the card's visual editor. |
+
 ## Configuration
 
 You will need the following credentials (obtained via reverse engineering of the Zeekr app):

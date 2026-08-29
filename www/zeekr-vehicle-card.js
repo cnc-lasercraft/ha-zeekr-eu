@@ -2,60 +2,191 @@
  * Zeekr Vehicle Card - Custom Lovelace Card for Home Assistant
  * Pure vanilla JS + Shadow DOM (no Lit, no imports, no external dependencies)
  *
+ * Entity IDs are discovered from the zeekr_eu integration's registry entries,
+ * so the card works on any install without naming its entities.
+ *
  * Usage:
  *   type: custom:zeekr-vehicle-card
- *   entity_prefix: zeekr_5278
+ *
+ * Optional:
+ *   device_id: <vehicle>              # only needed with more than one car
+ *   wallbox_power_entity: sensor.x    # power fallback while AC charging
+ *   entities: { battery_level: ... }  # pin individual entities by hand
  */
 
 // ---------------------------------------------------------------------------
 // Constants
 // ---------------------------------------------------------------------------
-const CARD_VERSION = "2.0.1";
+const CARD_VERSION = "3.0.0";
 const CARD_NAME = "zeekr-vehicle-card";
 
-const SENSOR_MAP = {
-  battery_level: "sensor.{prefix}_battery_level",
-  range: "sensor.{prefix}_range",
-  odometer: "sensor.{prefix}_odometer",
-  interior_temp: "sensor.{prefix}_interior_temperature",
-  charge_power: "sensor.{prefix}_charge_power",
-  charge_current: "sensor.{prefix}_charge_current",
-  charge_voltage: "sensor.{prefix}_charge_voltage",
-  charge_speed: "sensor.{prefix}_charge_speed",
-  charger_state: "sensor.{prefix}_charger_state",
-  tire_fl: "sensor.{prefix}_tire_pressure_driver",
-  tire_fr: "sensor.{prefix}_tire_pressure_passenger",
-  tire_rl: "sensor.{prefix}_tire_pressure_driverrear",
-  tire_rr: "sensor.{prefix}_tire_pressure_passengerrear",
-  tire_temp_fl: "sensor.{prefix}_tire_temperature_driver",
-  tire_temp_fr: "sensor.{prefix}_tire_temperature_passenger",
-  tire_temp_rl: "sensor.{prefix}_tire_temperature_driverrear",
-  tire_temp_rr: "sensor.{prefix}_tire_temperature_passengerrear",
-  consumption: "sensor.{prefix}_trip_2_average_consumption",
+// The integration this card reads from.
+const INTEGRATION_DOMAIN = "zeekr_eu";
+
+// Every entity the card needs, as [domain, entity_id suffix].
+//
+// Entity IDs are resolved against the integration's registry entries rather
+// than built from a prefix. zeekr_eu derives IDs from the device name and the
+// VIN, and which of the two wins depends on when the entity was first created,
+// so the same logical sensor shows up as `binary_sensor.zeekr_5278_charging_status`
+// on one install and `binary_sensor.zeekr_l6t..._zeekr_5278_charging_status` on
+// the next. The trailing part is the only stable piece, so we match on that.
+const ENTITY_CATALOG = {
+  // Core telemetry
+  battery_level:   ["sensor", "battery_level"],
+  range:           ["sensor", "range"],
+  odometer:        ["sensor", "odometer"],
+  interior_temp:   ["sensor", "interior_temperature"],
+  consumption:     ["sensor", "trip_2_average_consumption"],
+
+  // Charging
+  charge_power:    ["sensor", "charge_power"],
+  charge_current:  ["sensor", "charge_current"],
+  charge_voltage:  ["sensor", "charge_voltage"],
+  charge_speed:    ["sensor", "charge_speed"],
+  charger_state:   ["sensor", "charger_state"],
+  charging:        ["binary_sensor", "charging_status"],
+  plugged_in:      ["binary_sensor", "plugged_in"],
+  charging_switch: ["switch", "charging"],
+
+  // Tyre pressures and temperatures
+  tire_fl:         ["sensor", "tire_pressure_driver"],
+  tire_fr:         ["sensor", "tire_pressure_passenger"],
+  tire_rl:         ["sensor", "tire_pressure_driverrear"],
+  tire_rr:         ["sensor", "tire_pressure_passengerrear"],
+  tire_temp_fl:    ["sensor", "tire_temperature_driver"],
+  tire_temp_fr:    ["sensor", "tire_temperature_passenger"],
+  tire_temp_rl:    ["sensor", "tire_temperature_driverrear"],
+  tire_temp_rr:    ["sensor", "tire_temperature_passengerrear"],
+
+  // Tyre warnings
+  tire_pre_warn_driver:        ["binary_sensor", "tire_pre_warning_driver"],
+  tire_pre_warn_passenger:     ["binary_sensor", "tire_pre_warning_passenger"],
+  tire_pre_warn_driverrear:    ["binary_sensor", "tire_pre_warning_driverrear"],
+  tire_pre_warn_passengerrear: ["binary_sensor", "tire_pre_warning_passengerrear"],
+  tire_temp_warn_driver:        ["binary_sensor", "tire_temp_warning_driver"],
+  tire_temp_warn_passenger:     ["binary_sensor", "tire_temp_warning_passenger"],
+  tire_temp_warn_driverrear:    ["binary_sensor", "tire_temp_warning_driverrear"],
+  tire_temp_warn_passengerrear: ["binary_sensor", "tire_temp_warning_passengerrear"],
+
+  // Tyre pressure targets (integration config entities)
+  tire_season:       ["select", "reifensaison"],
+  tire_front_summer: ["number", "reifendruck_vorne_sommer"],
+  tire_front_winter: ["number", "reifendruck_vorne_winter"],
+  tire_rear_summer:  ["number", "reifendruck_hinten_sommer"],
+  tire_rear_winter:  ["number", "reifendruck_hinten_winter"],
+
+  // Charge planning
+  charge_mode:     ["select", "lademodus"],
+  laden_min_soc:   ["number", "laden_min_soc"],
+  laden_max_soc:   ["number", "laden_max_soc"],
+  notladung_start: ["number", "notladung_start"],
+  notladung_stop:  ["number", "notladung_stop"],
+
+  // Doors, windows, openings
+  door_fl:   ["binary_sensor", "driver_door_open"],
+  door_fr:   ["binary_sensor", "passenger_door_open"],
+  door_rl:   ["binary_sensor", "driver_rear_door_open"],
+  door_rr:   ["binary_sensor", "passenger_rear_door_open"],
+  trunk:     ["binary_sensor", "trunk_open"],
+  hood:      ["binary_sensor", "hood_open"],
+  lock:      ["lock", "central_locking"],
+  window_driver:        ["cover", "window_driver"],
+  window_passenger:     ["cover", "window_passenger"],
+  window_driverrear:    ["cover", "window_driverrear"],
+  window_passengerrear: ["cover", "window_passengerrear"],
+  sunshade:         ["cover", "sunshade"],
+  sunroof_position: ["sensor", "sunroof_position"],
+  sun_curtain_rear: ["sensor", "sun_curtain_rear_position"],
+
+  // Comfort and status
+  climate:        ["climate", "climate"],
+  defroster:      ["switch", "defroster"],
+  sentry:         ["switch", "sentry_mode"],
+  steering_heat:  ["switch", "steering_wheel_heat"],
+  flash:          ["button", "flash_blinkers"],
+  fragrance:      ["binary_sensor", "fragrance_active"],
+  engine_running: ["binary_sensor", "engine_running"],
+
+  seat_heat_driver:     ["select", "driver_seat_heat"],
+  seat_heat_passenger:  ["select", "passenger_seat_heat"],
+  seat_heat_rear_left:  ["select", "rear_left_seat_heat"],
+  seat_heat_rear_right: ["select", "rear_right_seat_heat"],
+  seat_vent_driver:     ["select", "driver_seat_vent"],
+  seat_vent_passenger:  ["select", "passenger_seat_vent"],
 };
 
-const BINARY_MAP = {
-  charging: "binary_sensor.{prefix}_charging_status",
-  plugged_in: "binary_sensor.{prefix}_plugged_in",
-  door_fl: "binary_sensor.{prefix}_driver_door_open",
-  door_fr: "binary_sensor.{prefix}_passenger_door_open",
-  door_rl: "binary_sensor.{prefix}_driver_rear_door_open",
-  door_rr: "binary_sensor.{prefix}_passenger_rear_door_open",
-  trunk: "binary_sensor.{prefix}_trunk_open",
-  hood: "binary_sensor.{prefix}_hood_open",
+// Seat keys rendered in the "AKTIV" list, with their German labels.
+const SEAT_HEAT_KEYS = {
+  seat_heat_driver: "Fahrer",
+  seat_heat_passenger: "Beifahrer",
+  seat_heat_rear_left: "Hinten L",
+  seat_heat_rear_right: "Hinten R",
 };
-
-const LOCK_ENTITY = "lock.{prefix}_central_locking";
-const SWITCH_DEFROSTER = "switch.{prefix}_defroster";
-const SWITCH_SENTRY = "switch.{prefix}_sentry_mode";
-const SWITCH_STEERING_HEAT = "switch.{prefix}_steering_wheel_heat";
-const SWITCH_CHARGING = "switch.{prefix}_charging";
 
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
-function eid(template, prefix) {
-  return template.replace("{prefix}", prefix);
+// All entity IDs the integration has registered, optionally narrowed to one
+// vehicle. Returns [] when the registry holds no zeekr_eu entries; the card
+// reports that rather than guessing at IDs that may belong to something else.
+function zeekrEntityIds(hass, deviceId) {
+  var reg = hass && hass.entities;
+  if (!reg) return [];
+  var ids = [];
+  for (var id in reg) {
+    var ent = reg[id];
+    if (!ent || ent.platform !== INTEGRATION_DOMAIN) continue;
+    if (deviceId && ent.device_id !== deviceId) continue;
+    ids.push(id);
+  }
+  return ids;
+}
+
+// Vehicles the integration has registered, as [{id, name}], for the editor.
+function zeekrDevices(hass) {
+  var reg = hass && hass.entities;
+  if (!reg) return [];
+  var devices = (hass && hass.devices) || {};
+  var seen = {};
+  var out = [];
+  for (var id in reg) {
+    var ent = reg[id];
+    if (!ent || ent.platform !== INTEGRATION_DOMAIN || !ent.device_id) continue;
+    if (seen[ent.device_id]) continue;
+    seen[ent.device_id] = true;
+    var dev = devices[ent.device_id];
+    out.push({
+      id: ent.device_id,
+      name: (dev && (dev.name_by_user || dev.name)) || ent.device_id,
+    });
+  }
+  return out;
+}
+
+// Escape text that ends up inside generated HTML (device names are user input).
+function esc(value) {
+  return String(value === null || value === undefined ? "" : value)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+
+// Pick the entity whose ID ends in `suffix`. A few entities carry no prefix at
+// all (`button.flash_blinkers`), so an exact match counts too. Where several
+// match, the shortest ID wins — that is the one without the extra VIN segment.
+function pickEntity(ids, domain, suffix) {
+  var prefix = domain + ".";
+  var best = null;
+  for (var i = 0; i < ids.length; i++) {
+    var id = ids[i];
+    if (!id.startsWith(prefix)) continue;
+    var object = id.slice(prefix.length);
+    if (object !== suffix && !object.endsWith("_" + suffix)) continue;
+    if (best === null || id.length < best.length) best = id;
+  }
+  return best;
 }
 
 function stateVal(hass, entityId) {
@@ -70,13 +201,6 @@ function stateNum(hass, entityId) {
 
 function isOn(hass, entityId) {
   return stateVal(hass, entityId) === "on";
-}
-
-function findVinEntity(hass, domain, suffix) {
-  var keys = Object.keys(hass.states);
-  return keys.find(function (k) {
-    return k.startsWith(domain + ".") && k.endsWith(suffix) && k.includes("l6t");
-  });
 }
 
 function kpaToBars(kpa) {
@@ -563,99 +687,73 @@ class ZeekrVehicleCard extends HTMLElement {
     this.attachShadow({ mode: "open" });
     this._hass = null;
     this._config = null;
-    this._prefix = null;
     this._entities = {};
     this._lockEntity = null;
     this._defrosterEntity = null;
     this._sentryEntity = null;
+    this._steeringHeatEntity = null;
+    this._chargingSwitchEntity = null;
     this._climateEntity = null;
     this._flashEntity = null;
-    this._vinResolved = false;
+    this._seatHeatEntities = null;
+    this._resolved = false;
+    this._foundVehicle = false;
     this._prevStates = {};
   }
 
   setConfig(config) {
-    if (!config.entity_prefix) {
-      throw new Error("Please define entity_prefix");
-    }
-    this._config = Object.assign({}, config);
-    this._prefix = config.entity_prefix;
+    this._config = Object.assign({}, config || {});
+    // Entity IDs are resolved from the registry once `hass` arrives, so no
+    // configuration is required for a single-vehicle install.
+    this._resolved = false;
+  }
 
-    // Pre-resolve entity IDs
-    this._entities = {};
-    var key, tpl;
-    for (key in SENSOR_MAP) {
-      tpl = SENSOR_MAP[key];
-      this._entities[key] = eid(tpl, this._prefix);
-    }
-    for (key in BINARY_MAP) {
-      tpl = BINARY_MAP[key];
-      this._entities[key] = eid(tpl, this._prefix);
-    }
-    this._lockEntity = eid(LOCK_ENTITY, this._prefix);
-    this._defrosterEntity = eid(SWITCH_DEFROSTER, this._prefix);
-    this._sentryEntity = eid(SWITCH_SENTRY, this._prefix);
-    this._steeringHeatEntity = eid(SWITCH_STEERING_HEAT, this._prefix);
-    this._chargingSwitchEntity = eid(SWITCH_CHARGING, this._prefix);
+  // Map every catalogue key to a concrete entity ID. Explicit `entities:`
+  // overrides in the card config always win, so an install with renamed
+  // entities can still pin them by hand.
+  _resolveEntities() {
+    var ids = zeekrEntityIds(this._hass, this._config.device_id);
+    var overrides = this._config.entities || {};
+    var resolved = {};
 
-    this._vinResolved = false;
-    this._climateEntity = null;
-    this._flashEntity = null;
-    this._seatHeatEntities = null;
+    for (var key in ENTITY_CATALOG) {
+      var entry = ENTITY_CATALOG[key];
+      resolved[key] = overrides[key] || pickEntity(ids, entry[0], entry[1]);
+    }
+
+    this._entities = resolved;
+    this._lockEntity = resolved.lock;
+    this._defrosterEntity = resolved.defroster;
+    this._sentryEntity = resolved.sentry;
+    this._steeringHeatEntity = resolved.steering_heat;
+    this._chargingSwitchEntity = resolved.charging_switch;
+    this._climateEntity = resolved.climate;
+    this._flashEntity = resolved.flash;
+
+    this._seatHeatEntities = {};
+    for (var seatKey in SEAT_HEAT_KEYS) {
+      this._seatHeatEntities[seatKey] = resolved[seatKey];
+    }
+
+    this._foundVehicle = ids.length > 0;
+    this._resolved = true;
   }
 
   set hass(value) {
     var old = this._hass;
     this._hass = value;
 
-    // Resolve VIN entities once
-    if (!this._vinResolved && value && value.states) {
-      this._climateEntity = findVinEntity(value, "climate", "_climate");
-      this._flashEntity = findVinEntity(value, "button", "_flash_blinkers");
-      // Find seat heat selects (VIN-based entity IDs)
-      var states = Object.keys(value.states);
-      var findSeat = function(suffix) {
-        return states.find(function(k) { return k.startsWith("select.zeekr_") && k.endsWith(suffix); }) || null;
-      };
-      this._seatHeatEntities = {
-        driver: findSeat("_driver_seat_heat"),
-        passenger: findSeat("_passenger_seat_heat"),
-        rear_left: findSeat("_rear_left_seat_heat"),
-        rear_right: findSeat("_rear_right_seat_heat"),
-      };
-      console.log("[ZEEKR] Seat heat entities:", JSON.stringify(this._seatHeatEntities));
-      this._vinResolved = true;
+    // Resolve entity IDs once, and keep retrying while nothing has been found:
+    // the card can be rendered before the integration's registry entries exist.
+    if (value && this._config && (!this._resolved || !this._foundVehicle)) {
+      this._resolveEntities();
     }
 
     // State diffing: only re-render when watched entities change
     if (old && value) {
-      var watchList = Object.values(this._entities).concat([
-        this._lockEntity,
-        this._defrosterEntity,
-        this._sentryEntity,
-        this._climateEntity,
-        "select.l6tza1s4xsn095278_reifensaison",
-        "number.l6tza1s4xsn095278_reifendruck_vorne_sommer",
-        "number.l6tza1s4xsn095278_reifendruck_hinten_sommer",
-        "number.l6tza1s4xsn095278_reifendruck_vorne_winter",
-        "number.l6tza1s4xsn095278_reifendruck_hinten_winter",
-        "select.l6tza1s4xsn095278_lademodus",
-        "number.l6tza1s4xsn095278_laden_min_soc",
-        "number.l6tza1s4xsn095278_laden_max_soc",
-        "number.l6tza1s4xsn095278_notladung_start",
-        "number.l6tza1s4xsn095278_notladung_stop",
-        "switch.zeekr_5278_charging",
-        "select.zeekr_l6tza1s4xsn095278_driver_seat_vent",
-        "select.zeekr_l6tza1s4xsn095278_passenger_seat_vent",
-        "binary_sensor.zeekr_5278_tire_pre_warning_driver",
-        "binary_sensor.zeekr_5278_tire_pre_warning_passenger",
-        "binary_sensor.zeekr_5278_tire_pre_warning_driverrear",
-        "binary_sensor.zeekr_5278_tire_pre_warning_passengerrear",
-        "binary_sensor.zeekr_5278_tire_temp_warning_driver",
-        "binary_sensor.zeekr_5278_tire_temp_warning_passenger",
-        "binary_sensor.zeekr_5278_tire_temp_warning_driverrear",
-        "binary_sensor.zeekr_5278_tire_temp_warning_passengerrear",
-      ]).filter(Boolean);
+      var watchList = Object.values(this._entities)
+        .concat([this._config && this._config.wallbox_power_entity])
+        .filter(Boolean);
 
       var changed = false;
       for (var i = 0; i < watchList.length; i++) {
@@ -685,7 +783,6 @@ class ZeekrVehicleCard extends HTMLElement {
 
   static getStubConfig() {
     return {
-      entity_prefix: "zeekr_5278",
       tire_season: "summer",
       tire_front_summer: 2.5,
       tire_rear_summer: 2.5,
@@ -697,6 +794,16 @@ class ZeekrVehicleCard extends HTMLElement {
   // --- Render ---
   _render() {
     if (!this._hass || !this._config) return;
+
+    if (!this._foundVehicle) {
+      this.shadowRoot.innerHTML = '<ha-card style="padding:16px;line-height:1.5;">'
+        + '<b>Zeekr Vehicle Card</b><br>'
+        + 'Keine Entities der Integration <code>' + INTEGRATION_DOMAIN + '</code> gefunden. '
+        + 'Ist die Zeekr-Integration eingerichtet?'
+        + '</ha-card>';
+      return;
+    }
+
     var h = this._hass;
     var e = this._entities;
 
@@ -718,7 +825,9 @@ class ZeekrVehicleCard extends HTMLElement {
     // sessions on an external OCPP wallbox even though the car is actively
     // pulling current. Fall back to the wallbox sensor as ground truth: if it
     // reports >1 kW we treat the car as charging and use that power value.
-    var wallboxPower = stateNum(h, "sensor.wallbox_1_power_active_import");
+    var wallboxPower = this._config.wallbox_power_entity
+      ? stateNum(h, this._config.wallbox_power_entity)
+      : null;
     var wallboxCharging = wallboxPower !== null && wallboxPower > 1.0;
     if (wallboxCharging) {
       isCharging = true;
@@ -746,14 +855,14 @@ class ZeekrVehicleCard extends HTMLElement {
     var tireTempRR = stateNum(h, e.tire_temp_rr);
 
     // Tire pressure targets from HA helpers
-    var season = stateVal(h, "select.l6tza1s4xsn095278_reifensaison");
+    var season = stateVal(h, e.tire_season);
     var isWinter = season === "Winter";
     var targetF = stateNum(h, isWinter
-      ? "number.l6tza1s4xsn095278_reifendruck_vorne_winter"
-      : "number.l6tza1s4xsn095278_reifendruck_vorne_sommer") || (isWinter ? 2.7 : 2.5);
+      ? e.tire_front_winter
+      : e.tire_front_summer) || (isWinter ? 2.7 : 2.5);
     var targetR = stateNum(h, isWinter
-      ? "number.l6tza1s4xsn095278_reifendruck_hinten_winter"
-      : "number.l6tza1s4xsn095278_reifendruck_hinten_sommer") || (isWinter ? 2.7 : 2.5);
+      ? e.tire_rear_winter
+      : e.tire_rear_summer) || (isWinter ? 2.7 : 2.5);
 
     var locked = stateVal(h, this._lockEntity) === "locked";
     var lockColor = locked ? "#4caf50" : "#e53935";
@@ -922,7 +1031,7 @@ class ZeekrVehicleCard extends HTMLElement {
           if (defrosterOn) items.push('<ha-icon icon="mdi:car-defrost-front" style="--mdc-icon-size:16px;color:#4fc3f7;"></ha-icon> Defrost');
           if (steeringHeatOn) items.push('<ha-icon icon="mdi:steering" style="--mdc-icon-size:16px;color:#ff5722;"></ha-icon> Lenkradheizung');
           if (seatHeatEntities) {
-            var seatNames = {driver: 'Fahrer', passenger: 'Beifahrer', rear_left: 'Hinten L', rear_right: 'Hinten R'};
+            var seatNames = SEAT_HEAT_KEYS;
             for (var sk in seatHeatEntities) {
               var se = seatHeatEntities[sk];
               if (se) {
@@ -933,11 +1042,11 @@ class ZeekrVehicleCard extends HTMLElement {
               }
             }
           }
-          var chargingSw = stateVal(h, 'switch.zeekr_5278_charging');
+          var chargingSw = stateVal(h, e.charging_switch);
           if (chargingSw === 'on') items.push('<ha-icon icon="mdi:ev-plug-type2" style="--mdc-icon-size:16px;color:#ff9800;"></ha-icon> Lade-Switch Ein');
-          var driverVent = stateVal(h, 'select.zeekr_l6tza1s4xsn095278_driver_seat_vent');
+          var driverVent = stateVal(h, e.seat_vent_driver);
           if (driverVent && driverVent !== 'Off' && driverVent !== 'off' && driverVent !== 'unavailable') items.push('<ha-icon icon="mdi:fan" style="--mdc-icon-size:16px;color:#4fc3f7;"></ha-icon> Belüftung Fahrer ' + driverVent);
-          var passVent = stateVal(h, 'select.zeekr_l6tza1s4xsn095278_passenger_seat_vent');
+          var passVent = stateVal(h, e.seat_vent_passenger);
           if (passVent && passVent !== 'Off' && passVent !== 'off' && passVent !== 'unavailable') items.push('<ha-icon icon="mdi:fan" style="--mdc-icon-size:16px;color:#4fc3f7;"></ha-icon> Belüftung Beifahrer ' + passVent);
           if (sentryOn) items.push('<ha-icon icon="mdi:shield-car" style="--mdc-icon-size:16px;color:#66bb6a;"></ha-icon> Überwachung');
           if (!locked) items.push('<ha-icon icon="mdi:lock-open-variant" style="--mdc-icon-size:16px;color:#e53935;"></ha-icon> Entriegelt');
@@ -947,26 +1056,26 @@ class ZeekrVehicleCard extends HTMLElement {
           // Fenster (irgendeines offen)
           var anyWindowOpen = false;
           ['driver', 'passenger', 'driverrear', 'passengerrear'].forEach(function(w) {
-            if (stateVal(h, 'cover.zeekr_5278_window_' + w) === 'open') anyWindowOpen = true;
+            if (stateVal(h, e['window_' + w]) === 'open') anyWindowOpen = true;
           });
           if (anyWindowOpen) items.push('<ha-icon icon="mdi:window-open-variant" style="--mdc-icon-size:16px;color:#e53935;"></ha-icon> Fenster offen');
           // Schiebedach
-          var sunroofPos = stateNum(h, 'sensor.zeekr_l6tza1s4xsn095278_zeekr_5278_sunroof_position');
+          var sunroofPos = stateNum(h, e.sunroof_position);
           if (sunroofPos !== null && sunroofPos > 0 && sunroofPos < 101) items.push('<ha-icon icon="mdi:car-select" style="--mdc-icon-size:16px;color:#4fc3f7;"></ha-icon> Schiebedach offen');
           // Sonnenrollo Innenraum
-          if (stateVal(h, 'cover.zeekr_5278_sunshade') === 'open') items.push('<ha-icon icon="mdi:blinds-open" style="--mdc-icon-size:16px;color:#4fc3f7;"></ha-icon> Sonnenrollo offen');
+          if (stateVal(h, e.sunshade) === 'open') items.push('<ha-icon icon="mdi:blinds-open" style="--mdc-icon-size:16px;color:#4fc3f7;"></ha-icon> Sonnenrollo offen');
           // Heck-Sonnenschutz
-          var curtainRearPos = stateNum(h, 'sensor.zeekr_l6tza1s4xsn095278_zeekr_5278_sun_curtain_rear_position');
+          var curtainRearPos = stateNum(h, e.sun_curtain_rear);
           if (curtainRearPos !== null && curtainRearPos > 0 && curtainRearPos < 101) items.push('<ha-icon icon="mdi:blinds-horizontal" style="--mdc-icon-size:16px;color:#4fc3f7;"></ha-icon> Heck-Sonnenschutz offen');
           // Duft
-          if (isOn(h, 'binary_sensor.zeekr_l6tza1s4xsn095278_zeekr_5278_fragrance_active')) items.push('<ha-icon icon="mdi:spray" style="--mdc-icon-size:16px;color:#ab47bc;"></ha-icon> Duft aktiv');
+          if (isOn(h, e.fragrance)) items.push('<ha-icon icon="mdi:spray" style="--mdc-icon-size:16px;color:#ab47bc;"></ha-icon> Duft aktiv');
           // Motor läuft
-          if (isOn(h, 'binary_sensor.zeekr_l6tza1s4xsn095278_zeekr_5278_engine_running')) items.push('<ha-icon icon="mdi:engine" style="--mdc-icon-size:16px;color:#66bb6a;"></ha-icon> Motor läuft');
+          if (isOn(h, e.engine_running)) items.push('<ha-icon icon="mdi:engine" style="--mdc-icon-size:16px;color:#66bb6a;"></ha-icon> Motor läuft');
           var tireWarnPos = ['driver', 'passenger', 'driverrear', 'passengerrear'];
           var tireWarnNames = ['VL', 'VR', 'HL', 'HR'];
           for (var tw = 0; tw < 4; tw++) {
-            if (isOn(h, 'binary_sensor.zeekr_5278_tire_pre_warning_' + tireWarnPos[tw])) items.push('<ha-icon icon="mdi:tire" style="--mdc-icon-size:16px;color:#e53935;"></ha-icon> Reifendruck ' + tireWarnNames[tw]);
-            if (isOn(h, 'binary_sensor.zeekr_5278_tire_temp_warning_' + tireWarnPos[tw])) items.push('<ha-icon icon="mdi:thermometer-alert" style="--mdc-icon-size:16px;color:#e53935;"></ha-icon> Reifentemp ' + tireWarnNames[tw]);
+            if (isOn(h, e['tire_pre_warn_' + tireWarnPos[tw]])) items.push('<ha-icon icon="mdi:tire" style="--mdc-icon-size:16px;color:#e53935;"></ha-icon> Reifendruck ' + tireWarnNames[tw]);
+            if (isOn(h, e['tire_temp_warn_' + tireWarnPos[tw]])) items.push('<ha-icon icon="mdi:thermometer-alert" style="--mdc-icon-size:16px;color:#e53935;"></ha-icon> Reifentemp ' + tireWarnNames[tw]);
           }
 
           if (items.length === 0) return '';
@@ -1102,6 +1211,7 @@ class ZeekrVehicleCardEditor extends HTMLElement {
     super();
     this.attachShadow({ mode: "open" });
     this._config = null;
+    this._hass = null;
   }
 
   setConfig(config) {
@@ -1110,11 +1220,32 @@ class ZeekrVehicleCardEditor extends HTMLElement {
   }
 
   set hass(value) {
-    // Not needed for editor, but HA sets it
+    // Needed to list the vehicles the integration has registered.
+    var first = !this._hass;
+    this._hass = value;
+    if (first) this._render();
   }
 
   _render() {
     if (!this._config) return;
+
+    var self = this;
+    var vehicles = zeekrDevices(this._hass);
+    var vehicleField;
+    if (vehicles.length > 1) {
+      vehicleField = '<select id="cfg-device" class="native-select">'
+        + '<option value=""' + (this._config.device_id ? '' : ' selected') + '>Automatisch (erstes Fahrzeug)</option>'
+        + vehicles.map(function (v) {
+            return '<option value="' + esc(v.id) + '"'
+              + (self._config.device_id === v.id ? ' selected' : '') + '>' + esc(v.name) + '</option>';
+          }).join('')
+        + '</select>';
+    } else if (vehicles.length === 1) {
+      vehicleField = '<div class="hint">Erkannt: <b>' + esc(vehicles[0].name) + '</b></div>';
+    } else {
+      vehicleField = '<div class="hint warn">Keine Zeekr-Integration gefunden. '
+        + 'Die Card findet ihre Entities automatisch, sobald die Integration eingerichtet ist.</div>';
+    }
 
     var isSummer = (this._config.tire_season || 'summer') === 'summer';
     var act = 'background:var(--primary-color);color:#fff;border-color:var(--primary-color);';
@@ -1134,6 +1265,11 @@ class ZeekrVehicleCardEditor extends HTMLElement {
       + '.pressure-card .label { font-size: 12px; opacity: 0.6; margin-bottom: 4px; }'
       + '.pressure-card ha-textfield { width: 100%; }'
       + '.active-hint { text-align: center; font-size: 13px; margin-top: 8px; padding: 8px; border-radius: 8px; }'
+      + '.hint { font-size: 13px; opacity: 0.75; padding: 8px 0; }'
+      + '.hint.warn { color: var(--error-color, #e53935); opacity: 1; }'
+      + '.native-select { width: 100%; padding: 10px; border-radius: 8px; font-size: 14px;'
+      + '  background: var(--card-background-color, #fff); color: var(--primary-text-color);'
+      + '  border: 1px solid rgba(128,128,128,0.4); }'
       + '</style>'
 
       + '<div class="editor">'
@@ -1141,7 +1277,15 @@ class ZeekrVehicleCardEditor extends HTMLElement {
       // Fahrzeug
       + '<div class="section">'
       + '<div class="section-title"><ha-icon icon="mdi:car" style="--mdc-icon-size:20px;"></ha-icon> Fahrzeug</div>'
-      + '<ha-textfield label="Entity Prefix" value="' + (this._config.entity_prefix || '') + '" helper="z.B. zeekr_5278" id="cfg-prefix" style="width:100%;"></ha-textfield>'
+      + vehicleField
+      + '</div>'
+
+      // Wallbox (optional)
+      + '<div class="section">'
+      + '<div class="section-title"><ha-icon icon="mdi:ev-station" style="--mdc-icon-size:20px;"></ha-icon> Wallbox (optional)</div>'
+      + '<ha-textfield label="Leistungs-Sensor" value="' + esc(this._config.wallbox_power_entity || '') + '" '
+      + 'helper="z.B. sensor.wallbox_power — dient als Ersatzwert, wenn die Cloud beim AC-Laden 0 kW meldet" '
+      + 'id="cfg-wallbox" style="width:100%;"></ha-textfield>'
       + '</div>'
 
       // Reifendruck
@@ -1193,8 +1337,11 @@ class ZeekrVehicleCardEditor extends HTMLElement {
 
     var self = this;
 
-    var prefix = this.shadowRoot.getElementById("cfg-prefix");
-    if (prefix) prefix.addEventListener("input", function (ev) { self._valueChanged("entity_prefix", ev.target.value); });
+    var device = this.shadowRoot.getElementById("cfg-device");
+    if (device) device.addEventListener("change", function (ev) { self._valueChanged("device_id", ev.target.value || undefined); });
+
+    var wallbox = this.shadowRoot.getElementById("cfg-wallbox");
+    if (wallbox) wallbox.addEventListener("input", function (ev) { self._valueChanged("wallbox_power_entity", ev.target.value || undefined); });
 
     var btnSummer = this.shadowRoot.getElementById("btn-summer");
     if (btnSummer) btnSummer.addEventListener("click", function () { self._valueChanged("tire_season", "summer"); });
@@ -1218,7 +1365,11 @@ class ZeekrVehicleCardEditor extends HTMLElement {
   _valueChanged(key, value) {
     if (!this._config) return;
     var newConfig = Object.assign({}, this._config);
-    newConfig[key] = value;
+    if (value === undefined || value === "") {
+      delete newConfig[key];
+    } else {
+      newConfig[key] = value;
+    }
     this._config = newConfig;
     var event = new CustomEvent("config-changed", {
       detail: { config: newConfig },
