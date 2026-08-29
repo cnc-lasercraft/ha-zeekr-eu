@@ -6,9 +6,15 @@ API eingebettet als `api/` Unterordner (basiert auf zeekr_ev_api v0.1.12, MIT Li
 ## Deploy
 ```bash
 cd /Volumes/Daten/ClaudeCode/ha-zeekr-eu/custom_components
-tar czf - zeekr_eu | ssh has 'cd /homeassistant/custom_components && sudo tar xzf -'
+tar czf - --exclude='._*' zeekr_eu | ssh has 'cd /homeassistant/custom_components && sudo tar xzf -'
 ```
+`--exclude='._*'` ist nötig, sonst landen macOS-AppleDouble-Dateien auf dem HA.
 Danach HA neustarten (User macht das selbst).
+
+Die Lovelace-Card liegt in `custom_components/zeekr_eu/frontend/` und wird von der
+Integration selbst registriert (`/zeekr_eu/zeekr-vehicle-card.js?v=<VERSION>`) — kein
+`www/`, keine Lovelace-Ressource, kein Ressourcen-Bump. Cache-Busting läuft über
+`const.VERSION`, die mit `manifest.json` synchron bleiben muss.
 
 ## HA Logs
 ```bash
