@@ -1,8 +1,11 @@
 """Custom integration to integrate Zeekr EU with Home Assistant."""
 
 import logging
+from pathlib import Path
 
 import voluptuous as vol
+from homeassistant.components.frontend import add_extra_js_url
+from homeassistant.components.http import StaticPathConfig
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, ServiceCall
 from homeassistant.exceptions import ConfigEntryNotReady, HomeAssistantError
@@ -24,6 +27,7 @@ from .const import (
     DOMAIN,
     PLATFORMS,
     STARTUP_MESSAGE,
+    VERSION,
 )
 from .coordinator import ZeekrCoordinator
 from .herold import async_notify as herold_notify, async_register_topics
@@ -101,8 +105,38 @@ _LOGGER: logging.Logger = logging.getLogger(__package__)
 CONFIG_SCHEMA = cv.config_entry_only_config_schema(DOMAIN)
 
 
+CARD_FILENAME = "zeekr-vehicle-card.js"
+CARD_URL = f"/{DOMAIN}/{CARD_FILENAME}"
+CARD_REGISTERED = f"{DOMAIN}_card_registered"
+
+
+async def _async_register_card(hass: HomeAssistant) -> None:
+    """Serve the Lovelace card and load it on every dashboard.
+
+    Saves users from copying the file into www/ and registering a dashboard
+    resource by hand. The card is self-contained, so only this one file is
+    served. Registering the same URL twice raises, hence the flag.
+    """
+    if hass.data.get(CARD_REGISTERED):
+        return
+
+    card_path = Path(__file__).parent / "frontend" / CARD_FILENAME
+    if not await hass.async_add_executor_job(card_path.is_file):
+        _LOGGER.warning("Vehicle card missing at %s, not registering it", card_path)
+        return
+
+    await hass.http.async_register_static_paths(
+        [StaticPathConfig(CARD_URL, str(card_path), True)]
+    )
+    # The version query busts the browser cache on upgrade.
+    add_extra_js_url(hass, f"{CARD_URL}?v={VERSION}")
+    hass.data[CARD_REGISTERED] = True
+    _LOGGER.debug("Registered vehicle card at %s", CARD_URL)
+
+
 async def async_setup(hass: HomeAssistant, config: ConfigType):
     """Set up this integration using YAML is not supported."""
+    await _async_register_card(hass)
     return True
 
 
