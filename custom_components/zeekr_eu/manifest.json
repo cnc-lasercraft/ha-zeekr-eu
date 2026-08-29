@@ -3,7 +3,7 @@
   "name": "Zeekr EU Integration",
   "codeowners": ["@cnc-lasercraft"],
   "config_flow": true,
-  "dependencies": ["frontend"],
+  "dependencies": ["frontend", "http"],
   "documentation": "https://github.com/cnc-lasercraft/ha-zeekr-eu",
   "integration_type": "hub",
   "iot_class": "cloud_polling",
