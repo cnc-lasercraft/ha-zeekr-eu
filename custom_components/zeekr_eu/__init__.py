@@ -98,6 +98,8 @@ PRECONDITIONING_SCHEMA = vol.Schema(
 
 _LOGGER: logging.Logger = logging.getLogger(__package__)
 
+CONFIG_SCHEMA = cv.config_entry_only_config_schema(DOMAIN)
+
 
 async def async_setup(hass: HomeAssistant, config: ConfigType):
     """Set up this integration using YAML is not supported."""
