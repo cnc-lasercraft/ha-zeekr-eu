@@ -85,8 +85,6 @@ const ENTITY_CATALOG = {
   charge_mode:     ["select", "lademodus"],
   laden_min_soc:   ["number", "laden_min_soc"],
   laden_max_soc:   ["number", "laden_max_soc"],
-  notladung_start: ["number", "notladung_start"],
-  notladung_stop:  ["number", "notladung_stop"],
 
   // Doors, windows, openings
   door_fl:   ["binary_sensor", "driver_door_open"],
