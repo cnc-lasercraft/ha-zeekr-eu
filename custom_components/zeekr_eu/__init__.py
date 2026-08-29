@@ -219,7 +219,10 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry):
             ac_active = modus == KLIMA_MODUS_AC
             params.append({"key": KEY_AC, "value": _bool(ac_active)})
             if ac_active:
-                params.append({"key": f"{KEY_AC}.temp", "value": str(ac_temp)})
+                # Cloud accepts "26.0" with success=true but the car silently
+                # drops the command — ZAF expects integer-strings ("26") for
+                # whole degrees and decimal only when fractional ("25.5").
+                params.append({"key": f"{KEY_AC}.temp", "value": f"{ac_temp:g}"})
                 params.append({"key": f"{KEY_AC}.duration", "value": str(duration)})
 
             # Defrost
