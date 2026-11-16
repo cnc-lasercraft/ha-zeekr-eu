@@ -4,7 +4,7 @@
 NAME = "Zeekr EU Integration"
 DOMAIN = "zeekr_eu"
 DOMAIN_DATA = f"{DOMAIN}_data"
-VERSION = "1.1.0"
+VERSION = "1.1.1"
 
 ISSUE_URL = "https://github.com/cnc-lasercraft/ha-zeekr-eu/issues"
 
@@ -45,6 +45,8 @@ CONF_PROD_SECRET = "prod_secret"
 CONF_VIN_KEY = "vin_key"
 CONF_VIN_IV = "vin_iv"
 CONF_POLLING_INTERVAL = "polling_interval"
+# Optional outdoor temperature sensor for the cold-weather override
+CONF_OUTDOOR_TEMP_ENTITY = "outdoor_temp_entity"
 
 # Defaults
 DEFAULT_NAME = DOMAIN

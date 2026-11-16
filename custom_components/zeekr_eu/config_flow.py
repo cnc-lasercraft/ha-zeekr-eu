@@ -13,6 +13,7 @@ from .api import ZeekrClient
 from .const import (
     CONF_HMAC_ACCESS_KEY,
     CONF_HMAC_SECRET_KEY,
+    CONF_OUTDOOR_TEMP_ENTITY,
     CONF_PASSWORD,
     CONF_PASSWORD_PUBLIC_KEY,
     CONF_POLLING_INTERVAL,
@@ -227,16 +228,16 @@ class ZeekrEUOptionsFlowHandler(config_entries.OptionsFlow):
                 if not valid:
                     errors["base"] = "auth"
                 else:
+                    # The update listener in __init__.py reloads the entry.
                     self.hass.config_entries.async_update_entry(
                         self._config_entry, data=user_input
                     )
-                    await self.hass.config_entries.async_reload(self._config_entry.entry_id)
                     return self.async_abort(reason="reconfigure_successful")
             else:
+                # The update listener in __init__.py reloads the entry.
                 self.hass.config_entries.async_update_entry(
                     self._config_entry, data=user_input
                 )
-                await self.hass.config_entries.async_reload(self._config_entry.entry_id)
                 return self.async_abort(reason="reconfigure_successful")
 
         # Merge existing data
@@ -295,6 +296,17 @@ class ZeekrEUOptionsFlowHandler(config_entries.OptionsFlow):
                     ): selector.TextSelector(
                         selector.TextSelectorConfig(
                             type=selector.TextSelectorType.PASSWORD
+                        )
+                    ),
+                    # Optional: without it the cold-weather override is inactive.
+                    vol.Optional(
+                        CONF_OUTDOOR_TEMP_ENTITY,
+                        description={
+                            "suggested_value": data.get(CONF_OUTDOOR_TEMP_ENTITY)
+                        },
+                    ): selector.EntitySelector(
+                        selector.EntitySelectorConfig(
+                            domain="sensor", device_class="temperature"
                         )
                     ),
                 }

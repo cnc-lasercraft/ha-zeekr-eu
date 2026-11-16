@@ -11,13 +11,14 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.event import async_track_time_interval
 from homeassistant.util import dt as dt_util
 
+from .const import CONF_OUTDOOR_TEMP_ENTITY
+
 if TYPE_CHECKING:
     from .coordinator import ZeekrCoordinator
 
 _LOGGER = logging.getLogger(__name__)
 
 NUM_SLOTS = 3
-DEFAULT_AUSSENTEMP_SENSOR = "sensor.gw2000a_outdoor_temperature"
 
 # Weekday flag fields on SlotConfig, index 0=Mo..6=So
 WEEKDAY_FIELDS = ("mo", "di", "mi", "do", "fr", "sa", "so")
@@ -180,11 +181,9 @@ class VorbereitungScheduler:
         self,
         hass: HomeAssistant,
         coordinator: "ZeekrCoordinator",
-        aussentemp_entity_id: str = DEFAULT_AUSSENTEMP_SENSOR,
     ) -> None:
         self.hass = hass
         self.coordinator = coordinator
-        self.aussentemp_entity_id = aussentemp_entity_id
         self._unsub: Callable[[], None] | None = None
 
     def start(self) -> None:
@@ -273,8 +272,15 @@ class VorbereitungScheduler:
         # (Slot, Einmalig, Sofort-Button, manueller Service-Call).
 
     def _read_outside_temp(self) -> float | None:
-        """Read the outside temperature from the configured HA sensor."""
-        state = self.hass.states.get(self.aussentemp_entity_id)
+        """Read the outside temperature from the configured HA sensor.
+
+        Returns None when no sensor is configured — the cold-weather
+        override is then simply inactive.
+        """
+        entity_id = self.coordinator.entry.data.get(CONF_OUTDOOR_TEMP_ENTITY)
+        if not entity_id:
+            return None
+        state = self.hass.states.get(entity_id)
         if state is None or state.state in (None, "", "unknown", "unavailable"):
             return None
         try:

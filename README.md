@@ -79,6 +79,10 @@ You will need the following credentials (obtained via reverse engineering of the
 | VIN Key | AES key for VIN encryption |
 | VIN IV | AES IV for VIN encryption |
 
+Optional, under *Configure* on the integration: an **outdoor temperature
+sensor**. When it reads below the cold threshold, scheduled preconditioning
+switches to Defrost and runs longer. Without a sensor this override is inactive.
+
 ## Supported Regions
 
 EU, UAE, SEA, LA — with region-specific API endpoints and keys.

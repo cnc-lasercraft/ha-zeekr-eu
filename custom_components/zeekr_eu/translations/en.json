@@ -31,7 +31,8 @@
         "data": {
           "binary_sensor": "Binary sensor enabled",
           "sensor": "Sensor enabled",
-          "switch": "Switch enabled"
+          "switch": "Switch enabled",
+          "outdoor_temp_entity": "Outdoor temperature sensor (cold-weather override)"
         }
       }
     }
